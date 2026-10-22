@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import TeamForm from '../features/teams/TeamForm'
 import PlayerList from '../features/teams/PlayerList'
 import { fetchTeams, deleteTeam, errorMessage } from '../features/teams/TeamsApi'
-import '../features/teams/teams.css'
+import '../features/teams/Teams.css'
 
 export default function TeamsPage() {
   const [teams, setTeams] = useState([])
