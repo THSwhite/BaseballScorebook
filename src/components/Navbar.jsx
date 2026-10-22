@@ -18,6 +18,7 @@ export default function Navbar() {
           {user ? (
             <>
               <Link to="/games/new" className="text-stone-700 hover:underline">建立比賽</Link>
+              <Link to="/teams" className="text-stone-700 hover:underline">球隊管理</Link>
               <span className="hidden text-stone-500 sm:inline">{user.email}</span>
               <button type="button" onClick={handleSignOut} className="text-stone-700 hover:underline">登出</button>
             </>

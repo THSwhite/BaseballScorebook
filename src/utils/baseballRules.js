@@ -22,6 +22,7 @@ export const POSITIONS = Object.freeze({
   7: '左外野手 (LF)',
   8: '中外野手 (CF)',
   9: '右外野手 (RF)',
+  10: '自由球員 (SF)'
 });
 
 export const HIT_TYPES = Object.freeze({
