@@ -1,5 +1,7 @@
-import { useState } from 'react'
+/**CreateGameForm.jsx*/
+import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { fetchTeams } from '../teams/TeamsApi'
 
 const INNING_OPTIONS = [5, 7, 9]
 
@@ -7,6 +9,53 @@ function todayString() {
   const d = new Date()
   const pad = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+const inputClass =
+  'w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-stone-900 focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-700/30 read-only:bg-stone-100 read-only:text-stone-600'
+const labelClass = 'mb-1 block text-sm font-medium text-stone-700'
+
+/**
+ * 單一側球隊欄位：可從我的球隊快速套用，或手動輸入隊名
+ */
+function TeamField({ label, idPrefix, teams, teamId, name, onChange }) {
+  function handleSelect(e) {
+    const id = e.target.value
+    if (!id) {
+      // 改回手動輸入：保留目前的隊名，解除球隊連結
+      onChange({ teamId: '', name })
+      return
+    }
+    const team = teams.find((t) => t.id === id)
+    onChange({ teamId: id, name: team?.name ?? '' })
+  }
+
+  return (
+    <div className="space-y-2">
+      <div>
+        <label htmlFor={`${idPrefix}_select`} className={labelClass}>{label}</label>
+        <select id={`${idPrefix}_select`} value={teamId} onChange={handleSelect} className={inputClass}>
+          <option value="">手動輸入隊名</option>
+          {teams.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}（{t.players?.[0]?.count ?? 0} 人）
+            </option>
+          ))}
+        </select>
+      </div>
+      <input
+        id={`${idPrefix}_name`}
+        type="text"
+        required
+        aria-label={`${label}名稱`}
+        value={name}
+        readOnly={!!teamId}
+        onChange={(e) => onChange({ teamId: '', name: e.target.value })}
+        placeholder="隊名"
+        className={inputClass}
+      />
+    </div>
+  )
 }
 
 /**
@@ -19,13 +68,31 @@ export default function CreateGameForm({ onCreated }) {
     game_time: '18:00',
     location: '',
     away_team: '',
+    away_team_id: '',
     home_team: '',
+    home_team_id: '',
     innings: 7,
   })
+  const [teams, setTeams] = useState([])
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
+  // 載入我的球隊；失敗時不影響使用，退回手動輸入
+  useEffect(() => {
+    let cancelled = false
+    fetchTeams()
+      .then((data) => !cancelled && setTeams(data))
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
+  const setAway = ({ teamId, name }) =>
+    setForm((f) => ({ ...f, away_team_id: teamId, away_team: name }))
+  const setHome = ({ teamId, name }) =>
+    setForm((f) => ({ ...f, home_team_id: teamId, home_team: name }))
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -35,6 +102,9 @@ export default function CreateGameForm({ onCreated }) {
     const home = form.home_team.trim()
     if (!away || !home) return setError('請填寫先攻與後攻球隊名稱。')
     if (away === home) return setError('先攻與後攻不能是同一支球隊。')
+    if (form.away_team_id && form.away_team_id === form.home_team_id) {
+      return setError('先攻與後攻不能選擇同一支球隊。')
+    }
 
     setSaving(true)
     const { data: userData } = await supabase.auth.getUser()
@@ -47,6 +117,8 @@ export default function CreateGameForm({ onCreated }) {
         location: form.location.trim() || null,
         away_team: away,
         home_team: home,
+        away_team_id: form.away_team_id || null,
+        home_team_id: form.home_team_id || null,
         innings: Number(form.innings),
         status: 'scheduled',
         away_score: 0,
@@ -60,10 +132,6 @@ export default function CreateGameForm({ onCreated }) {
     if (insertError) return setError(`建立失敗：${insertError.message}`)
     onCreated?.(data)
   }
-
-  const inputClass =
-    'w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-stone-900 focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-700/30'
-  const labelClass = 'mb-1 block text-sm font-medium text-stone-700'
 
   return (
     <form onSubmit={handleSubmit} className="mx-auto max-w-xl space-y-5">
@@ -83,16 +151,30 @@ export default function CreateGameForm({ onCreated }) {
         <input id="location" type="text" value={form.location} onChange={set('location')} placeholder="例如：高雄市立澄清湖棒球場" className={inputClass} />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label htmlFor="away_team" className={labelClass}>先攻球隊（客隊）</label>
-          <input id="away_team" type="text" required value={form.away_team} onChange={set('away_team')} className={inputClass} />
-        </div>
-        <div>
-          <label htmlFor="home_team" className={labelClass}>後攻球隊（主隊）</label>
-          <input id="home_team" type="text" required value={form.home_team} onChange={set('home_team')} className={inputClass} />
-        </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <TeamField
+          label="先攻球隊（客隊）"
+          idPrefix="away_team"
+          teams={teams}
+          teamId={form.away_team_id}
+          name={form.away_team}
+          onChange={setAway}
+        />
+        <TeamField
+          label="後攻球隊（主隊）"
+          idPrefix="home_team"
+          teams={teams}
+          teamId={form.home_team_id}
+          name={form.home_team}
+          onChange={setHome}
+        />
       </div>
+
+      {teams.length === 0 && (
+        <p className="text-sm text-stone-500">
+          還沒有建立球隊也沒關係，可直接手動輸入隊名。建立球隊後，就能在這裡快速套用。
+        </p>
+      )}
 
       <div>
         <label htmlFor="innings" className={labelClass}>比賽局數</label>
