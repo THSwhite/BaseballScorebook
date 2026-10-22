@@ -6,7 +6,7 @@ import {
   deletePlayer,
   errorMessage,
 } from './TeamsApi'
-import { POSITIONS, BATS_LABEL, THROWS_LABEL } from './constants'
+import { POSITIONS, BATS_LABEL, THROWS_LABEL } from './Constants'
 
 /* ---------- 新增／編輯用的小表單 ---------- */
 function PlayerForm({ initial, submitLabel, onSubmit, onCancel }) {
