@@ -5,7 +5,7 @@ import {
   updatePlayer,
   deletePlayer,
   errorMessage,
-} from './TeamsApi'
+} from './teamsApi'
 import { POSITIONS, BATS_LABEL, THROWS_LABEL } from './Constants'
 
 /* ---------- 新增／編輯用的小表單 ---------- */

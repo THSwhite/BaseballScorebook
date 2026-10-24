@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { createTeam, updateTeam, errorMessage } from './TeamsApi'
+import { createTeam, updateTeam, errorMessage } from './teamsApi'
 
 // team 有值 = 編輯，沒有 = 新增
 // 父層請加 key={team?.id ?? 'new'}，切換球隊時表單會自動重設

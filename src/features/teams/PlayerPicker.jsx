@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fetchPlayers, errorMessage } from './TeamsApi'
+import { fetchPlayers, errorMessage } from './teamsApi'
 
 /**
  * 從球隊名單挑選球員（給 LineupEditor 使用）
