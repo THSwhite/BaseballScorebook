@@ -13,7 +13,7 @@ export default function Scoreboard({ game, state, totals, status }) {
     status === 'finished'
       ? '比賽結束'
       : status === 'live'
-        ? `${state.inning} 局${state.half === 'top' ? '上' : '下'}`
+        ? `${state.inning} 局${state.half === 'top' ? '上' : '下'}${state.setSize > 1 ? ` ${state.setNo}/${state.setSize}` : ''}`
         : '未開賽'
 
   const winner = status === 'finished' ? state.winner : null

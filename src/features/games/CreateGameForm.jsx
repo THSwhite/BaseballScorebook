@@ -1,9 +1,13 @@
 /**CreateGameForm.jsx*/
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { fetchTeams } from '../teams/TeamsApi'
+import { fetchTeams } from '../teams/teamsApi'
 
 const INNING_OPTIONS = [5, 7, 9]
+const SET_OPTIONS = [
+  { value: 1, title: '1set', hint: '正常進行，上下半局輪流' },
+  { value: 2, title: '2set', hint: '每隊連續打兩個半局' },
+]
 
 function todayString() {
   const d = new Date()
@@ -72,6 +76,7 @@ export default function CreateGameForm({ onCreated }) {
     home_team: '',
     home_team_id: '',
     innings: 7,
+    set_size: 1,
   })
   const [teams, setTeams] = useState([])
   const [saving, setSaving] = useState(false)
@@ -120,6 +125,7 @@ export default function CreateGameForm({ onCreated }) {
         away_team_id: form.away_team_id || null,
         home_team_id: form.home_team_id || null,
         innings: Number(form.innings),
+        set_size: Number(form.set_size),
         status: 'scheduled',
         away_score: 0,
         home_score: 0,
@@ -184,6 +190,35 @@ export default function CreateGameForm({ onCreated }) {
           ))}
         </select>
       </div>
+
+      <fieldset>
+        <legend className={labelClass}>進攻方式</legend>
+        <div className="grid grid-cols-2 gap-3">
+          {SET_OPTIONS.map((o) => {
+            const active = Number(form.set_size) === o.value
+            return (
+              <label
+                key={o.value}
+                className={`cursor-pointer rounded-md border px-3 py-2 focus-within:ring-2 focus-within:ring-emerald-700/40 ${
+                  active ? 'border-emerald-700 bg-emerald-50 text-emerald-900' : 'border-stone-300 bg-white text-stone-700'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="set_size"
+                  value={o.value}
+                  checked={active}
+                  onChange={() => setForm((f) => ({ ...f, set_size: o.value }))}
+                  className="sr-only"
+                />
+                <span className="block text-sm font-semibold">{o.title}</span>
+                <span className="block text-xs text-stone-500">{o.hint}</span>
+              </label>
+            )
+          })}
+        </div>
+        <p className="mt-1 text-xs text-stone-500">記錄時，每次換局都可以隨時調整。</p>
+      </fieldset>
 
       {error && (
         <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>

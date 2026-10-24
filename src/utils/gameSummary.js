@@ -7,27 +7,37 @@ import { HIT_RESULTS } from './plateAppearance'
 // 不算打數的結果：四壞球、觸身球、犧牲打、犧牲觸擊
 const NOT_AB = new Set(['BB', 'HBP', 'SF', 'SH'])
 
-/** 依半局分組，附上每個打席結束後的比分與出局數（時間順序，由舊到新） */
+/** 紀錄的種類：pa 打席（舊資料沒有 kind，也當作打席）、note 備註、set 更改連續打幾個半局 */
+export const isPA = (e) => (e.kind ?? 'pa') === 'pa'
+
+/**
+ * 依半局分組（2set 時同一隊的兩個半局會分成兩組）。
+ * 每組的 items 依時間順序（由舊到新）放打席、備註、set 更改；打席附上結束後的比分與出局數。
+ */
 export function buildFeed(events) {
   const groups = []
   const score = { away: 0, home: 0 }
   let current = null
 
   for (const e of events) {
+    const kind = e.kind ?? 'pa'
     const side = e.half === 'top' ? 'away' : 'home'
-    score[side] += e.runs
-    const key = `${e.inning}-${e.half}`
+    const setNo = e.set_no ?? 1
+    if (kind === 'pa') score[side] += e.runs
+
+    const key = `${e.inning}-${e.half}-${setNo}`
     if (!current || current.key !== key) {
-      current = { key, inning: e.inning, half: e.half, side, plays: [], runs: 0, hits: 0 }
+      current = { key, inning: e.inning, half: e.half, setNo, side, items: [], runs: 0, hits: 0 }
       groups.push(current)
     }
-    current.plays.push({
-      ...e,
-      outsAfter: e.outs_before + e.outs_added,
-      scoreAfter: { ...score },
-    })
-    current.runs += e.runs
-    if (HIT_RESULTS.has(e.result)) current.hits += 1
+
+    if (kind === 'pa') {
+      current.items.push({ ...e, kind, outsAfter: e.outs_before + e.outs_added, scoreAfter: { ...score } })
+      current.runs += e.runs
+      if (HIT_RESULTS.has(e.result)) current.hits += 1
+    } else {
+      current.items.push({ ...e, kind })
+    }
   }
   return groups
 }
@@ -36,6 +46,7 @@ export function buildFeed(events) {
 export function teamTotals(events) {
   const t = { away: { h: 0, e: 0 }, home: { h: 0, e: 0 } }
   for (const e of events) {
+    if (!isPA(e)) continue
     const bat = e.half === 'top' ? 'away' : 'home'
     const field = bat === 'away' ? 'home' : 'away'
     if (HIT_RESULTS.has(e.result)) t[bat].h += 1
@@ -74,6 +85,7 @@ export function buildBoxScore(events, lineups) {
     )
 
     for (const e of events) {
+      if (!isPA(e)) continue
       if ((e.half === 'top' ? 'away' : 'home') !== side) continue
       const row = ensure(e.batting_order, { name: e.batter_name, number: e.batter_number })
       if (!NOT_AB.has(e.result)) row.ab += 1

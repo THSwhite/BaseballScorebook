@@ -31,6 +31,7 @@ function Situation({ game, state, lineups, finished }) {
     <div className="space-y-4 rounded-lg border border-stone-200 bg-white p-4">
       <p className="text-center text-sm font-medium text-stone-700">
         {state.inning} 局{state.half === 'top' ? '上' : '下'}・{team} 進攻
+        {state.setSize > 1 && `（第 ${state.setNo} / ${state.setSize} 個半局）`}
       </p>
       <BaseDiamond bases={state.bases} outs={state.outs} />
       <dl className="space-y-2 border-t border-stone-100 pt-3 text-sm">
@@ -95,9 +96,9 @@ export default function LivePage() {
     )
   }
 
-  const { state, events, totals } = live
+  const { state, totals } = live
   const finished = state.over || game.status === 'finished'
-  const started = events.length > 0
+  const started = live.started
   const status = finished ? 'finished' : started ? 'live' : 'scheduled'
 
   const tabClass = (active) =>

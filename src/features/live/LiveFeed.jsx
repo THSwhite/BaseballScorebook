@@ -17,6 +17,7 @@ function batterLine(play) {
   return `第 ${play.batting_order} 棒${who ? `・${who}` : ''}`
 }
 
+/* ---------- 打席 ---------- */
 function PlayRow({ play, game, isLatest }) {
   const meta = RESULT_MAP[play.result]
   const scoring = play.runs > 0
@@ -36,7 +37,7 @@ function PlayRow({ play, game, isLatest }) {
       </div>
 
       <div className="min-w-0 flex-1">
-        <p className="flex items-center gap-2 text-xs text-stone-500">
+        <p className="flex flex-wrap items-center gap-2 text-xs text-stone-500">
           {batterLine(play)}
           {isLatest && <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-white">最新</span>}
           {play.with_error && <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">失誤</span>}
@@ -53,27 +54,67 @@ function PlayRow({ play, game, isLatest }) {
   )
 }
 
+/* ---------- 記錄員的備註 ---------- */
+function NoteRow({ note }) {
+  return (
+    <li className="flex gap-3 border-l-4 border-sky-400 bg-sky-50 px-3 py-3">
+      <div className="w-[4.75rem] shrink-0 text-center">
+        <span className="block rounded bg-sky-600 px-1.5 py-1 text-xs font-semibold text-white">備註</span>
+      </div>
+      <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-stone-900">{note.description}</p>
+    </li>
+  )
+}
+
+/* ---------- 更改 1set / 2set ---------- */
+function SetRow({ item }) {
+  return (
+    <li className="bg-stone-50 px-3 py-2 text-center text-xs text-stone-500">{item.description}</li>
+  )
+}
+
 /**
  * 逐打席文字轉播：依半局分組，最新的在最上面，可以用局數篩選
- * @param groups  buildFeed() 的結果（時間由舊到新）
+ * 每組的 items 依時間順序放打席、備註、set 更改（見 gameSummary.buildFeed）
  */
 export default function LiveFeed({ game, state, groups, finished }) {
   const [filter, setFilter] = useState('all')
 
-  const currentKey = `${state.inning}-${state.half}`
+  const currentKey = `${state.inning}-${state.half}-${state.setNo}`
   const last = groups[groups.length - 1]
-  const showWaiting = !finished && last && last.key !== currentKey // 剛換邊，這個半局還沒有打席
+  const showWaiting = !finished && last && last.key !== currentKey // 剛換邊，這個半局還沒有任何紀錄
 
   const allGroups = showWaiting
-    ? [...groups, { key: currentKey, inning: state.inning, half: state.half, side: state.half === 'top' ? 'away' : 'home', plays: [], runs: 0, hits: 0 }]
+    ? [
+        ...groups,
+        {
+          key: currentKey,
+          inning: state.inning,
+          half: state.half,
+          setNo: state.setNo,
+          side: state.half === 'top' ? 'away' : 'home',
+          items: [],
+          runs: 0,
+          hits: 0,
+        },
+      ]
     : groups
 
+  // 2set：同一隊同一局有兩個半局時，標題要寫第幾個半局
+  const multiSet = new Set(allGroups.filter((g) => g.setNo > 1).map((g) => `${g.inning}-${g.half}`))
+
   const inningList = [...new Set(allGroups.map((g) => g.inning))]
-  const visible = [...allGroups].filter((g) => filter === 'all' || g.inning === filter).reverse()
-  const latestId = last?.plays[last.plays.length - 1]?.id
+  const visible = allGroups.filter((g) => filter === 'all' || g.inning === filter).reverse()
+
+  // 「最新」標記放在最後一個打席
+  let latestId = null
+  for (let i = groups.length - 1; i >= 0 && !latestId; i -= 1) {
+    const lastPlay = [...groups[i].items].reverse().find((x) => x.kind === 'pa')
+    if (lastPlay) latestId = lastPlay.id
+  }
 
   if (allGroups.length === 0) {
-    return <p className="rounded-lg border border-stone-200 bg-white py-10 text-center text-stone-500">比賽還沒有任何打席記錄。</p>
+    return <p className="rounded-lg border border-stone-200 bg-white py-10 text-center text-stone-500">比賽還沒有任何記錄。</p>
   }
 
   const tabClass = (active) =>
@@ -99,22 +140,27 @@ export default function LiveFeed({ game, state, groups, finished }) {
           <header className="flex items-center justify-between gap-3 bg-stone-100 px-3 py-2">
             <h3 className="font-semibold text-stone-900">
               {g.inning} 局{g.half === 'top' ? '上' : '下'}
+              {multiSet.has(`${g.inning}-${g.half}`) && (
+                <span className="ml-1 text-sm font-normal text-stone-600">・第 {g.setNo} 個半局</span>
+              )}
               <span className="ml-2 text-sm font-normal text-stone-600">
                 {g.side === 'away' ? game.away_team : game.home_team} 進攻
               </span>
             </h3>
-            {g.plays.length > 0 && (
+            {g.items.some((x) => x.kind === 'pa') && (
               <span className="text-sm tabular-nums text-stone-600">{g.runs} 分・{g.hits} 安打</span>
             )}
           </header>
 
-          {g.plays.length === 0 ? (
+          {g.items.length === 0 ? (
             <p className="px-3 py-4 text-sm text-stone-500">這個半局剛開始，等待第一個打席…</p>
           ) : (
             <ul className="divide-y divide-stone-100">
-              {[...g.plays].reverse().map((play) => (
-                <PlayRow key={play.id} play={play} game={game} isLatest={play.id === latestId && !finished} />
-              ))}
+              {[...g.items].reverse().map((item) => {
+                if (item.kind === 'note') return <NoteRow key={item.id} note={item} />
+                if (item.kind === 'set') return <SetRow key={item.id} item={item} />
+                return <PlayRow key={item.id} play={item} game={game} isLatest={item.id === latestId && !finished} />
+              })}
             </ul>
           )}
         </section>

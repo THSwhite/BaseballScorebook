@@ -89,7 +89,10 @@ export function validateDetails(result, { direction, height } = {}) {
 }
 
 /* ---------- 狀態 ---------- */
-export function initialState() {
+/**
+ * @param setSize 每隊一次連續打幾個半局：1 = 正常輪流，2 = 連續打兩個半局（2set）
+ */
+export function initialState(setSize = 1) {
   return {
     inning: 1,
     half: 'top', // top = 客隊（先攻）進攻，bottom = 主隊（後攻）進攻
@@ -100,6 +103,9 @@ export function initialState() {
     nextBatter: { away: 1, home: 1 }, // 兩隊各自下一位打者的打序
     over: false,
     winner: null, // 'away' | 'home' | null
+    setSize, // 目前的設定：每隊連續打幾個半局
+    setNo: 1, // 目前是這隊這一輪的第幾個半局（1 ~ setSize）
+    halfPlays: 0, // 目前這個半局已經記錄了幾個打席
   }
 }
 
@@ -190,37 +196,60 @@ export function defaultOutcome(result, bases) {
 /* ---------- 套用一個打席 ---------- */
 const fail = (error) => ({ ok: false, error })
 
-// 一個半局結束／比賽結束的判斷
-function settle(next, ctx) {
+const finishWith = (next, winner) => {
+  next.over = true
+  next.winner = winner
+  return next
+}
+
+// 一整輪結束（連續打完設定的半局數）：換邊，下半結束就換局
+function endTurn(next, ctx) {
   const innings = ctx.innings ?? RULES.INNINGS
   const { away, home } = next.score
-  const finish = (winner) => {
-    next.over = true
-    next.winner = winner
-    return next
-  }
-  const ensure = (side) => {
-    const arr = next.lineScore[side]
-    while (arr.length < next.inning) arr.push(0)
-  }
-
-  // 再見：後攻在最後一局（含延長）下半超前，立刻結束
-  if (next.half === 'bottom' && next.inning >= innings && home > away) return finish('home')
-  if (next.outs < RULES.OUTS_PER_HALF) return next
-
-  next.outs = 0
-  next.bases = [null, null, null]
+  next.setNo = 1
   if (next.half === 'top') {
-    ensure('away')
-    // 最後一局上半結束時後攻已領先，不必打下半
-    if (next.inning >= innings && home > away) return finish('home')
+    // 最後一局先攻打完時後攻已領先，不必打下半
+    if (next.inning >= innings && home > away) return finishWith(next, 'home')
     next.half = 'bottom'
   } else {
-    ensure('home')
-    if (next.inning >= innings && home !== away) return finish(home > away ? 'home' : 'away')
+    if (next.inning >= innings && home !== away) return finishWith(next, home > away ? 'home' : 'away')
     next.inning += 1 // 同分就延長賽，沒有局數上限
     next.half = 'top'
   }
+  return next
+}
+
+// 打席之後的判斷：再見、半局結束（2set 時同一隊接著再打）、比賽結束
+function settle(next, ctx) {
+  const innings = ctx.innings ?? RULES.INNINGS
+  const { away, home } = next.score
+
+  // 再見：後攻在最後一局（含延長）超前，立刻結束
+  if (next.half === 'bottom' && next.inning >= innings && home > away) return finishWith(next, 'home')
+  if (next.outs < RULES.OUTS_PER_HALF) return next
+
+  // 三個出局：這個半局結束
+  const arr = next.lineScore[next.half === 'top' ? 'away' : 'home']
+  while (arr.length < next.inning) arr.push(0)
+  next.outs = 0
+  next.bases = [null, null, null]
+  next.halfPlays = 0
+
+  if (next.setNo < next.setSize) {
+    next.setNo += 1 // 2set：同一隊接著再打一個半局
+    return next
+  }
+  return endTurn(next, ctx)
+}
+
+/**
+ * 更改「每隊連續打幾個半局」。設定從下一次判斷開始生效：
+ * 如果剛好在半局之間（這個半局還沒有打席），而且照新設定這隊已經打夠了，就立刻換邊。
+ */
+export function applySetSize(state, size, ctx = {}) {
+  if (state.over || state.setSize === size) return state
+  const next = { ...state, setSize: size }
+  if (state.halfPlays === 0 && state.setNo > size) return endTurn(next, ctx)
   return next
 }
 
@@ -279,6 +308,7 @@ export function evaluatePlateAppearance(state, pa, ctx = {}) {
   // 新狀態
   const next = {
     ...state,
+    halfPlays: state.halfPlays + 1,
     bases: [null, null, null],
     score: { ...state.score, [side]: state.score[side] + runs },
     lineScore: { away: [...state.lineScore.away], home: [...state.lineScore.home] },
@@ -320,10 +350,20 @@ export function rowToPa(row) {
   }
 }
 
-/** 把所有打席依序重播，得到目前的比賽狀態 */
-export function replay(rows, ctx) {
-  let state = initialState()
+/**
+ * 把所有紀錄依序重播，得到目前的比賽狀態
+ * 紀錄有三種：pa 打席（預設）、note 備註（不影響比賽）、set 更改連續打幾個半局
+ * @param ctx { innings, lineupSize, initialSetSize }
+ */
+export function replay(rows, ctx = {}) {
+  let state = initialState(ctx.initialSetSize ?? 1)
   for (const row of rows) {
+    const kind = row.kind ?? 'pa'
+    if (kind === 'note') continue
+    if (kind === 'set') {
+      if (row.set_size === 1 || row.set_size === 2) state = applySetSize(state, row.set_size, ctx)
+      continue
+    }
     const res = evaluatePlateAppearance(state, rowToPa(row), ctx)
     if (res.ok) state = res.nextState // 資料異常的那一筆直接略過，不讓整場比賽壞掉
   }

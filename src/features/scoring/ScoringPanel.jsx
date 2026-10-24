@@ -101,6 +101,85 @@ function SyncStatus({ sync }) {
   )
 }
 
+/* ---------- 每隊連續打幾個半局：1set / 2set ---------- */
+function SetControl({ state, battingTeam, atBoundary, onChange }) {
+  const option = (size, title, hint) => {
+    const active = state.setSize === size
+    return (
+      <button
+        type="button"
+        aria-pressed={active}
+        onClick={() => !active && onChange(size)}
+        className={`flex-1 rounded-md px-3 py-2 text-left ${
+          active ? 'bg-emerald-800 text-white' : 'bg-white text-stone-700 ring-1 ring-stone-300 hover:bg-stone-50'
+        }`}
+      >
+        <span className="block text-sm font-semibold">{title}</span>
+        <span className={`block text-xs ${active ? 'text-emerald-100' : 'text-stone-500'}`}>{hint}</span>
+      </button>
+    )
+  }
+
+  return (
+    <section
+      aria-label="每隊連續打幾個半局"
+      className={`space-y-2 rounded-lg border p-3 ${atBoundary ? 'border-amber-300 bg-amber-50' : 'border-stone-200 bg-white'}`}
+    >
+      <p className="text-sm font-medium text-stone-800">
+        {atBoundary ? `換局了：${battingTeam} 進攻，要調整連續打幾個半局嗎？` : '每隊連續打幾個半局'}
+      </p>
+      <div className="flex gap-2">
+        {option(1, '1set', '輪流打')}
+        {option(2, '2set', '連續打兩個半局')}
+      </div>
+      {state.setSize > 1 && (
+        <p className="text-xs text-stone-500">
+          目前是 {battingTeam} 的第 {state.setNo} / {state.setSize} 個半局。改成 1set，這個半局結束（或現在剛好換局時）就會換邊。
+        </p>
+      )}
+    </section>
+  )
+}
+
+/* ---------- 備註：送出後會顯示在轉播的時間軸裡 ---------- */
+function NoteBox({ onSend }) {
+  const [text, setText] = useState('')
+
+  function submit(e) {
+    e.preventDefault()
+    const clean = text.trim()
+    if (!clean) return
+    onSend(clean)
+    setText('')
+  }
+
+  return (
+    <form onSubmit={submit} className="space-y-2 rounded-lg border border-stone-200 bg-white p-3">
+      <label htmlFor="game-note" className="text-sm font-medium text-stone-800">
+        備註<span className="ml-2 text-xs font-normal text-stone-500">送出後會顯示在轉播裡</span>
+      </label>
+      <div className="flex gap-2">
+        <input
+          id="game-note"
+          type="text"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          maxLength={200}
+          placeholder="例如：投手換人、暫停、場地狀況…"
+          className="min-w-0 flex-1 rounded-md border border-stone-300 bg-white px-3 py-2 text-stone-900 focus:border-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-700/30"
+        />
+        <button
+          type="submit"
+          disabled={!text.trim()}
+          className="rounded-md bg-emerald-800 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-900 disabled:opacity-40"
+        >
+          發送
+        </button>
+      </div>
+    </form>
+  )
+}
+
 /* ---------- 記錄面板 ---------- */
 export default function ScoringPanel({ game }) {
   const g = useScoringGame(game)
@@ -116,6 +195,8 @@ export default function ScoringPanel({ game }) {
   const side = state.half === 'top' ? 'away' : 'home'
   const battingTeam = side === 'away' ? game.away_team : game.home_team
   const lastEvent = events[events.length - 1]
+  // 剛換局（這個半局還沒有打席）：提醒可以調整 1set / 2set
+  const atBoundary = !g.finished && g.paCount > 0 && state.halfPlays === 0
 
   // details：{ movements, batterTo, direction, height, withError, withFc }
   function commit(result, details) {
@@ -179,6 +260,7 @@ export default function ScoringPanel({ game }) {
         <section className="space-y-3">
           <p className="text-sm font-medium text-stone-700">
             {state.inning} 局{state.half === 'top' ? '上' : '下'}・{battingTeam} 進攻
+            {state.setSize > 1 && `（第 ${state.setNo} / ${state.setSize} 個半局）`}
           </p>
           <BaseDiamond bases={state.bases} outs={state.outs} />
 
@@ -197,6 +279,10 @@ export default function ScoringPanel({ game }) {
                 </p>
               )}
             </div>
+          )}
+
+          {!g.finished && (
+            <SetControl state={state} battingTeam={battingTeam} atBoundary={atBoundary} onChange={g.changeSetSize} />
           )}
         </section>
 
@@ -232,6 +318,8 @@ export default function ScoringPanel({ game }) {
           {message && (
             <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{message}</p>
           )}
+
+          <NoteBox onSend={g.addNote} />
         </section>
       </div>
 
@@ -252,7 +340,7 @@ export default function ScoringPanel({ game }) {
           <button
             type="button"
             onClick={handleFinish}
-            disabled={events.length === 0}
+            disabled={g.paCount === 0}
             className="rounded-md px-4 py-2 text-sm text-red-700 hover:bg-red-50 disabled:opacity-40"
           >
             結束比賽
@@ -270,7 +358,15 @@ export default function ScoringPanel({ game }) {
                 <span className="w-10 shrink-0 text-stone-500">
                   {e.inning}{e.half === 'top' ? '上' : '下'}
                 </span>
-                <span className="text-stone-800">{e.description}</span>
+                <span className="min-w-0 break-words text-stone-800">
+                  {e.kind === 'note' && (
+                    <span className="mr-2 rounded bg-sky-600 px-1.5 py-0.5 text-xs font-semibold text-white">備註</span>
+                  )}
+                  {e.kind === 'set' && (
+                    <span className="mr-2 rounded bg-stone-700 px-1.5 py-0.5 text-xs font-semibold text-white">設定</span>
+                  )}
+                  {e.description}
+                </span>
               </li>
             ))}
           </ul>

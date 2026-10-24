@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { replay } from '../../utils/plateAppearance'
-import { buildBoxScore, buildFeed, teamTotals } from '../../utils/gameSummary'
+import { buildBoxScore, buildFeed, isPA, teamTotals } from '../../utils/gameSummary'
 
 const POLL_MS = 8000 // 即時推送失效時的保底輪詢間隔
 const GENERIC_LINEUP_SIZE = 9
@@ -129,18 +129,20 @@ export function useLiveGame(gameId) {
   const ctx = useMemo(
     () => ({
       innings: game?.innings ?? 9,
+      initialSetSize: game?.set_size ?? 1,
       lineupSize: {
         away: lineups.away.length || GENERIC_LINEUP_SIZE,
         home: lineups.home.length || GENERIC_LINEUP_SIZE,
       },
     }),
-    [game?.innings, lineups]
+    [game?.innings, game?.set_size, lineups]
   )
 
   const state = useMemo(() => replay(events, ctx), [events, ctx])
   const groups = useMemo(() => buildFeed(events), [events])
   const totals = useMemo(() => teamTotals(events), [events])
+  const started = useMemo(() => events.some(isPA), [events]) // 只有備註不算開賽
   const boxScore = useMemo(() => buildBoxScore(events, lineups), [events, lineups])
 
-  return { loading, error, game, lineups, events, state, groups, totals, boxScore, connected, updatedAt, refresh }
+  return { loading, error, game, lineups, events, started, state, groups, totals, boxScore, connected, updatedAt, refresh }
 }
