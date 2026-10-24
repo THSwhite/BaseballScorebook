@@ -2,17 +2,18 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import BaseDiamond from './BaseDiamond'
 import ResultButtons from './ResultButtons'
-import RunnerAdjust from './RunnerAdjust'
-import { useScoringGame } from './UseScoringGame'
+import PlaySheet from './PlaySheet'
+import { useScoringGame } from './useScoringGame'
 import {
-  HIT_DIRECTION_OPTIONS,
+  HAS_BATTED_BALL,
   HIT_RESULTS,
-  HIT_TYPE_OPTIONS,
+  defaultHeight,
   defaultOutcome,
 } from '../../utils/plateAppearance'
 
-// 這些結果就算有跑者，也直接記錄（跑者去向固定）；其他結果會先讓記錄員確認跑者
-const SKIP_CONFIRM = new Set(['HR', '3B', 'BB', 'HBP', 'K', 'PO'])
+// 沒有擊球的結果（三振、保送、觸身球）：就算有跑者也直接記錄，跑者去向固定。
+// 有擊球的結果一律先開確認畫面（要選方向、高度，跑者去向也在同一個畫面）
+const SKIP_CONFIRM = new Set(['BB', 'HBP', 'K'])
 
 const hasNumber = (n) => n !== null && n !== undefined && n !== ''
 
@@ -100,40 +101,11 @@ function SyncStatus({ sync }) {
   )
 }
 
-/* ---------- 選填的擊球資料用的選項鈕 ---------- */
-function Chips({ label, options, value, onChange }) {
-  return (
-    <div>
-      <p className="mb-1.5 text-xs font-semibold text-stone-500">{label}</p>
-      <div className="flex flex-wrap gap-2">
-        {options.map((o) => {
-          const active = value === o.value
-          return (
-            <button
-              key={o.value}
-              type="button"
-              aria-pressed={active}
-              onClick={() => onChange(active ? '' : o.value)} // 再點一次取消
-              className={`rounded-full px-3 py-1.5 text-sm ${
-                active ? 'bg-emerald-800 text-white' : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
-              }`}
-            >
-              {o.label}
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
 /* ---------- 記錄面板 ---------- */
 export default function ScoringPanel({ game }) {
   const g = useScoringGame(game)
   const [adjusting, setAdjusting] = useState(null) // { result, movements, batterTo }
   const [alwaysConfirm, setAlwaysConfirm] = useState(false)
-  const [hitType, setHitType] = useState('')
-  const [hitDirection, setHitDirection] = useState('')
   const [message, setMessage] = useState('')
 
   if (g.loading) return <p className="py-10 text-center text-stone-500">載入記錄中…</p>
@@ -145,27 +117,21 @@ export default function ScoringPanel({ game }) {
   const battingTeam = side === 'away' ? game.away_team : game.home_team
   const lastEvent = events[events.length - 1]
 
-  function commit(result, movements, batterTo) {
-    const res = g.record({
-      result,
-      movements,
-      batterTo,
-      hitType: hitType || null,
-      hitDirection: hitDirection || null,
-    })
+  // details：{ movements, batterTo, direction, height, withError, withFc }
+  function commit(result, details) {
+    const res = g.record({ result, ...details })
     if (!res.ok) return setMessage(res.error)
     setAdjusting(null)
-    setHitType('')
-    setHitDirection('')
     setMessage('')
   }
 
   function handlePick(result) {
     setMessage('')
     const outcome = defaultOutcome(result, state.bases)
-    const needConfirm = hasRunners && (alwaysConfirm || !SKIP_CONFIRM.has(result))
-    if (needConfirm) setAdjusting({ result, ...outcome })
-    else commit(result, outcome.movements, outcome.batterTo)
+    const needSheet =
+      HAS_BATTED_BALL.has(result) || (hasRunners && (alwaysConfirm || !SKIP_CONFIRM.has(result)))
+    if (needSheet) setAdjusting({ result, ...outcome, direction: '', height: defaultHeight(result) })
+    else commit(result, { movements: outcome.movements, batterTo: outcome.batterTo })
   }
 
   function handleFinish() {
@@ -237,31 +203,19 @@ export default function ScoringPanel({ game }) {
         {/* 右：記錄 */}
         <section className="space-y-4">
           {adjusting ? (
-            <RunnerAdjust
+            <PlaySheet
               key={`${state.inning}-${state.half}-${events.length}-${adjusting.result}`}
               result={adjusting.result}
               bases={state.bases}
               batter={batter}
               initial={adjusting}
               preview={g.evaluate}
-              onConfirm={(movements, batterTo) => commit(adjusting.result, movements, batterTo)}
+              onConfirm={(details) => commit(adjusting.result, details)}
               onCancel={() => setAdjusting(null)}
             />
           ) : (
             <>
               <ResultButtons state={state} disabled={g.finished} onPick={handlePick} />
-
-              <details className="rounded-md border border-stone-200 bg-white p-3">
-                <summary className="cursor-pointer text-sm font-medium text-stone-700">
-                  擊球資料（選填）
-                  {(hitType || hitDirection) && <span className="ml-2 text-emerald-800">已選</span>}
-                </summary>
-                <div className="mt-3 space-y-3">
-                  <Chips label="擊球類型" options={HIT_TYPE_OPTIONS} value={hitType} onChange={setHitType} />
-                  <Chips label="擊球方向" options={HIT_DIRECTION_OPTIONS} value={hitDirection} onChange={setHitDirection} />
-                  <p className="text-xs text-stone-500">選好之後，記錄下一個打席時一併存入，記完會自動清除。</p>
-                </div>
-              </details>
 
               <label className="flex items-center gap-2 text-sm text-stone-600">
                 <input
@@ -270,7 +224,7 @@ export default function ScoringPanel({ game }) {
                   onChange={(e) => setAlwaysConfirm(e.target.checked)}
                   className="h-4 w-4 accent-emerald-800"
                 />
-                有跑者時，每次都先確認跑者去向
+                有跑者時，三振、保送也先確認跑者去向
               </label>
             </>
           )}

@@ -32,14 +32,14 @@ export function buildFeed(events) {
   return groups
 }
 
-/** 兩隊的安打數與失誤數（失誤算在守備那一隊） */
+/** 兩隊的安打數與失誤數（失誤算在守備那一隊；包含「失誤上壘」與安打、出局時附有的失誤） */
 export function teamTotals(events) {
   const t = { away: { h: 0, e: 0 }, home: { h: 0, e: 0 } }
   for (const e of events) {
     const bat = e.half === 'top' ? 'away' : 'home'
     const field = bat === 'away' ? 'home' : 'away'
     if (HIT_RESULTS.has(e.result)) t[bat].h += 1
-    if (e.result === 'E') t[field].e += 1
+    if (e.result === 'E' || e.with_error) t[field].e += 1
   }
   return t
 }

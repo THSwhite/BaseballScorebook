@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { defaultHitType, evaluatePlateAppearance, replay } from '../../utils/plateAppearance'
+import { evaluatePlateAppearance, replay, validateDetails } from '../../utils/plateAppearance'
 import { describePlateAppearance } from '../../utils/formatters'
-import * as queue from './OfflineQueue'
+import * as queue from './offlineQueue'
 
 const TABLE = 'plate_appearances'
 const GENERIC_LINEUP_SIZE = 9 // 沒設定先發名單時，用 9 棒輪轉
@@ -151,15 +151,17 @@ export function useScoringGame(game) {
 
   /** 預覽／驗證一個打席（不寫入） */
   const evaluate = useCallback(
-    (result, movements, batterTo) =>
-      evaluatePlateAppearance(state, { result, batter: currentBatter, movements, batterTo }, ctx),
+    (result, movements, batterTo, extras = {}) =>
+      evaluatePlateAppearance(state, { result, batter: currentBatter, movements, batterTo, ...extras }, ctx),
     [state, currentBatter, ctx]
   )
 
   const record = useCallback(
-    ({ result, movements, batterTo, hitType = null, hitDirection = null }) => {
+    ({ result, movements, batterTo, direction = '', height = '', withError = false, withFc = false }) => {
       if (finished) return { ok: false, error: '比賽已結束' }
-      const ev = evaluate(result, movements, batterTo)
+      const problem = validateDetails(result, { direction, height })
+      if (problem) return { ok: false, error: problem }
+      const ev = evaluate(result, movements, batterTo, { withError, withFc })
       if (!ev.ok) return ev
 
       const row = {
@@ -173,10 +175,16 @@ export function useScoringGame(game) {
         batter_name: currentBatter.name ?? '',
         batter_number: currentBatter.number,
         result,
-        hit_type: hitType ?? defaultHitType(result),
-        hit_direction: hitDirection,
+        hit_type: height || null,
+        hit_direction: direction || null,
         ...ev.record,
-        description: describePlateAppearance({ result, batter: currentBatter, ...ev.record }),
+        description: describePlateAppearance({
+          result,
+          batter: currentBatter,
+          hit_direction: direction || null,
+          hit_type: height || null,
+          ...ev.record,
+        }),
       }
 
       touched.current = true

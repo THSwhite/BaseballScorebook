@@ -17,15 +17,14 @@ export const RESULT_LIST = [
   { code: '3B', label: '三壘安打', group: 'hit' },
   { code: 'HR', label: '全壘打', group: 'hit' },
   { code: 'BB', label: '四壞球', group: 'reach' },
+  { code: 'HBP', label: '觸身球', group: 'reach' },
   { code: 'E', label: '失誤上壘', group: 'reach' },
   { code: 'FC', label: '野手選擇', group: 'reach' },
   { code: 'K', label: '三振', group: 'out' },
-  { code: 'GO', label: '滾地出局', group: 'out' },
-  { code: 'FO', label: '飛球出局', group: 'out' },
-  { code: 'LO', label: '平飛出局', group: 'out' },
-  { code: 'PO', label: '內野高飛', group: 'out' },
+  { code: 'OUT', label: '打擊出局', group: 'out' }, // 方向、高度在確認畫面選
   { code: 'DP', label: '雙殺打', group: 'other' },
   { code: 'SF', label: '高飛犧牲打', group: 'other' },
+  { code: 'SH', label: '犧牲觸擊', group: 'other' },
 ]
 
 export const GROUP_LIST = [
@@ -35,26 +34,59 @@ export const GROUP_LIST = [
   { key: 'other', label: '雙殺・犧牲打' },
 ]
 
-export const RESULT_MAP = Object.fromEntries(RESULT_LIST.map((r) => [r.code, r]))
+// 舊版的出局按鈕（滾地、飛球、平飛、內野高飛）。現在合併成「打擊出局」，高度改在確認畫面選。
+// 保留這幾個代碼，是為了讓之前記錄的比賽還能正常重播與顯示。
+const LEGACY_RESULTS = [
+  { code: 'GO', label: '滾地出局', group: 'out' },
+  { code: 'FO', label: '飛球出局', group: 'out' },
+  { code: 'LO', label: '平飛出局', group: 'out' },
+  { code: 'PO', label: '內野高飛', group: 'out' },
+]
+
+export const RESULT_MAP = Object.fromEntries([...RESULT_LIST, ...LEGACY_RESULTS].map((r) => [r.code, r]))
 
 export const HIT_RESULTS = new Set(['1B', '2B', '3B', 'HR'])
-const BATTER_OUT = new Set(['K', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF']) // 打者本人出局
+const BATTER_OUT = new Set(['K', 'OUT', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF', 'SH']) // 打者本人出局
 const NO_RBI = new Set(['E', 'DP']) // 這兩種不記打點
 
-/* ---------- 選填的擊球資料（extra2 打擊習慣用）---------- */
-export const HIT_TYPE_OPTIONS = [
+/* ---------- 擊球方向、高度、附加情況（extra2 打擊習慣用）---------- */
+// 方向 = 球往哪個守備位置去（存進 plate_appearances.hit_direction）
+export const DIRECTION_OPTIONS = [
+  { value: '1B', label: '一', name: '一壘' },
+  { value: '2B', label: '二', name: '二壘' },
+  { value: '3B', label: '三', name: '三壘' },
+  { value: 'SS', label: '游', name: '游擊' },
+  { value: 'P', label: '投', name: '投手' },
+  { value: 'C', label: '捕', name: '捕手' },
+  { value: 'LF', label: '左', name: '左外野' },
+  { value: 'CF', label: '中', name: '中外野' },
+  { value: 'RF', label: '右', name: '右外野' },
+  { value: 'SF', label: '自由', name: '自由球員' },
+]
+// 高度（存進 plate_appearances.hit_type）
+export const HEIGHT_OPTIONS = [
   { value: 'ground', label: '滾地' },
   { value: 'line', label: '平飛' },
-  { value: 'fly', label: '飛球' },
-  { value: 'pop', label: '內野高飛' },
+  { value: 'fly', label: '高飛' },
 ]
-export const HIT_DIRECTION_OPTIONS = [
-  { value: 'L', label: '左' },
-  { value: 'C', label: '中' },
-  { value: 'R', label: '右' },
-]
-const DEFAULT_HIT_TYPE = { GO: 'ground', FO: 'fly', LO: 'line', PO: 'pop', SF: 'fly', SH: 'bunt', DP: 'ground' }
-export const defaultHitType = (result) => DEFAULT_HIT_TYPE[result] ?? null
+
+// 安打與出局：方向、高度一定要選
+export const DETAIL_REQUIRED = new Set(['1B', '2B', '3B', 'HR', 'OUT', 'DP', 'SF', 'SH'])
+// 有擊球的結果（失誤上壘、野手選擇也有擊球，但方向與高度可以不填）
+export const HAS_BATTED_BALL = new Set([...DETAIL_REQUIRED, 'E', 'FC'])
+// 安打與出局的同時，可以標記「附有失誤」「附有野手選擇」
+export const SIDE_PLAY_ALLOWED = DETAIL_REQUIRED
+
+const DEFAULT_HEIGHT = { HR: 'fly', SF: 'fly', DP: 'ground', SH: 'ground' } // 這幾種通常固定，先幫忙選好
+export const defaultHeight = (result) => DEFAULT_HEIGHT[result] ?? ''
+
+/** 檢查必填的擊球資料。只用在「新記錄」，重播舊資料時不檢查，免得舊比賽壞掉 */
+export function validateDetails(result, { direction, height } = {}) {
+  if (!DETAIL_REQUIRED.has(result)) return ''
+  if (!direction) return '請選擇擊球方向'
+  if (!height) return '請選擇擊球高度'
+  return ''
+}
 
 /* ---------- 狀態 ---------- */
 export function initialState() {
@@ -239,6 +271,9 @@ export function evaluatePlateAppearance(state, pa, ctx = {}) {
     rbi,
     runners: movements.map((m) => ({ from: m.from, to: m.to, runner: state.bases[m.from - 1] })),
     batter_to: batterTo,
+    // 附有失誤／野選：只是標記（用在轉播文字與失誤統計），跑者實際去向由使用者在確認畫面調整
+    with_error: SIDE_PLAY_ALLOWED.has(result) && !!pa.withError,
+    with_fc: SIDE_PLAY_ALLOWED.has(result) && !!pa.withFc,
   }
 
   // 新狀態
@@ -280,6 +315,8 @@ export function rowToPa(row) {
     },
     movements: (row.runners ?? []).map((r) => ({ from: r.from, to: r.to })),
     batterTo: row.batter_to,
+    withError: !!row.with_error,
+    withFc: !!row.with_fc,
   }
 }
 
