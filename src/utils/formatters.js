@@ -13,6 +13,8 @@ const ZONE_NAMES = {
 const HEIGHT_NAMES = { ground: '滾地', line: '平飛', fly: '高飛' }
 const BALL_NOUN = { ground: '滾地球', line: '平飛球', fly: '高飛球' }
 
+const HIT_BASE = { '1B': 1, '2B': 2, '3B': 3 } // 安打讓打者上到的壘包
+
 const hasNumber = (n) => n !== null && n !== undefined && n !== ''
 
 /** 球員顯示名稱：有姓名用姓名，沒有就用背號，再沒有就用打序 */
@@ -111,6 +113,11 @@ export function describePlateAppearance(pa) {
   }
 
   if (withError) parts.push('守備同時出現失誤')
+  // 安打附有失誤：打者比安打多進了壘包
+  const hitBase = HIT_BASE[result]
+  if (hitBase && batterTo > hitBase) {
+    parts.push(batterTo === 4 ? `${who} 因失誤跑回本壘得分` : `${who} 因失誤進佔${BASE_NAMES[batterTo]}`)
+  }
   if (withFc) parts.push('同時發生野手選擇')
 
   // 跑者變化：跑在前面的先說

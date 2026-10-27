@@ -46,6 +46,8 @@ const LEGACY_RESULTS = [
 export const RESULT_MAP = Object.fromEntries([...RESULT_LIST, ...LEGACY_RESULTS].map((r) => [r.code, r]))
 
 export const HIT_RESULTS = new Set(['1B', '2B', '3B', 'HR'])
+// 安打讓打者上到的壘包（4 = 全壘打）。附有失誤時，打者可以再多進，但不能比這個少
+export const HIT_BASE = { '1B': 1, '2B': 2, '3B': 3, HR: 4 }
 const BATTER_OUT = new Set(['K', 'OUT', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF', 'SH']) // 打者本人出局
 const NO_RBI = new Set(['E', 'DP']) // 這兩種不記打點
 
@@ -279,6 +281,11 @@ export function evaluatePlateAppearance(state, pa, ctx = {}) {
 
   const batterOut = BATTER_OUT.has(result)
   if (batterOut ? batterTo !== 0 : !(batterTo >= 1 && batterTo <= 4)) return fail('打者去向不正確')
+  // 安打：打者至少上到安打的壘包；只有「附有失誤」時才能再多進（全壘打已經是最遠）
+  const hitBase = HIT_BASE[result]
+  if (hitBase && batterTo !== hitBase && !(pa.withError && batterTo > hitBase)) {
+    return fail('只有附有失誤時，打者才能比安打多進壘')
+  }
 
   const endBases = [...movements.map((m) => m.to), batterTo].filter((t) => t >= 1 && t <= 3)
   if (new Set(endBases).size !== endBases.length) return fail('兩位跑者不能站在同一個壘包')
@@ -291,7 +298,9 @@ export function evaluatePlateAppearance(state, pa, ctx = {}) {
   // 得分：第三個出局的那一個打席，除了安打以外，得分不算
   const rawRuns = movements.filter((m) => m.to === 4).length + (batterTo === 4 ? 1 : 0)
   const runs = inningEnds && !HIT_RESULTS.has(result) ? 0 : rawRuns
-  const rbi = NO_RBI.has(result) ? 0 : runs
+  // 打點：打者自己跑回本壘不算打點（全壘打除外）
+  const ownRun = result !== 'HR' && batterTo === 4 && runs > 0 ? 1 : 0
+  const rbi = NO_RBI.has(result) ? 0 : runs - ownRun
 
   const record = {
     outs_before: state.outs,

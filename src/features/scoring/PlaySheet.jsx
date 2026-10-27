@@ -4,6 +4,7 @@ import {
   DIRECTION_OPTIONS,
   HAS_BATTED_BALL,
   HEIGHT_OPTIONS,
+  HIT_BASE,
   RESULT_MAP,
   SIDE_PLAY_ALLOWED,
   validateDetails,
@@ -41,7 +42,11 @@ export default function PlaySheet({ result, bases, batter, initial, preview, onC
   const hasBall = HAS_BATTED_BALL.has(result)
   const required = DETAIL_REQUIRED.has(result)
   const allowSidePlay = SIDE_PLAY_ALLOWED.has(result)
-  const batterAdjustable = result === 'E' // 失誤時打者可能多跑
+  // 失誤上壘，或一、二、三壘安打附有失誤時，打者可能因失誤多跑
+  const hitBase = HIT_BASE[result]
+  const batterAdjustable = result === 'E' || (!!hitBase && hitBase < 4 && withError)
+  const batterStart = hitBase ?? 1 // 打者最少會上到這個壘包
+  const batterOptions = Array.from({ length: 5 - batterStart }, (_, i) => batterStart + i)
   const showRunners = movements.length > 0 || batterAdjustable
 
   const evaluation = preview(result, movements, batterTo, { withError, withFc })
@@ -50,6 +55,12 @@ export default function PlaySheet({ result, bases, batter, initial, preview, onC
 
   const setDest = (from, to) =>
     setMovements((list) => list.map((m) => (m.from === from ? { ...m, to } : m)))
+
+  function toggleError() {
+    const next = !withError
+    setWithError(next)
+    if (!next && hitBase) setBatterTo(initial.batterTo) // 取消失誤：打者回到安打的壘包
+  }
 
   const rows = [...movements].sort((a, b) => b.from - a.from) // 跑在前面的先列
   const tag = (text, warn) => (
@@ -111,7 +122,7 @@ export default function PlaySheet({ result, bases, batter, initial, preview, onC
         <fieldset>
           <legend className="mb-1.5 text-xs font-semibold text-stone-600">附加情況{tag('沒有就不用選')}</legend>
           <div className="grid grid-cols-2 gap-2">
-            <button type="button" aria-pressed={withError} onClick={() => setWithError((v) => !v)} className={chipClass(withError)}>
+            <button type="button" aria-pressed={withError} onClick={toggleError} className={chipClass(withError)}>
               附有失誤
             </button>
             <button type="button" aria-pressed={withFc} onClick={() => setWithFc((v) => !v)} className={chipClass(withFc)}>
@@ -119,14 +130,14 @@ export default function PlaySheet({ result, bases, batter, initial, preview, onC
             </button>
           </div>
           {(withError || withFc) && showRunners && (
-            <p className="mt-1.5 text-xs text-stone-500">請在下方確認跑者的實際去向。</p>
+            <p className="mt-1.5 text-xs text-stone-500">請在下方確認打者與跑者的實際去向。</p>
           )}
         </fieldset>
       )}
 
       {showRunners && (
         <div>
-          <p className="mb-1.5 text-xs font-semibold text-stone-600">跑者去向</p>
+          <p className="mb-1.5 text-xs font-semibold text-stone-600">打者與跑者去向</p>
           <ul className="space-y-2">
             {rows.map((m) => (
               <li key={m.from} className="flex items-center justify-between gap-3">
@@ -159,7 +170,7 @@ export default function PlaySheet({ result, bases, batter, initial, preview, onC
                   onChange={(e) => setBatterTo(Number(e.target.value))}
                   className={selectClass}
                 >
-                  {[1, 2, 3, 4].map((to) => (
+                  {batterOptions.map((to) => (
                     <option key={to} value={to}>
                       {DEST_LABEL[to]}
                     </option>
