@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { evaluatePlateAppearance, replay, validateDetails } from '../../utils/plateAppearance'
+import {
+  allowsFielding,
+  evaluatePlateAppearance,
+  fieldingString,
+  replay,
+  validateDetails,
+} from '../../utils/plateAppearance'
 import { describePlateAppearance } from '../../utils/formatters'
 import { isPA } from '../../utils/gameSummary'
 import * as queue from './offlineQueue'
@@ -161,12 +167,31 @@ export function useScoringGame(game) {
   )
 
   const record = useCallback(
-    ({ result, movements, batterTo, direction = '', height = '', withError = false, withFc = false }) => {
+    ({
+      result,
+      movements,
+      batterTo,
+      direction = '',
+      height = '',
+      withError = false,
+      withFc = false,
+      fielding = [],
+      errorBy = '',
+      errorKind = '',
+    }) => {
       if (finished) return { ok: false, error: '比賽已結束' }
       const problem = validateDetails(result, { direction, height })
       if (problem) return { ok: false, error: problem }
       const ev = evaluate(result, movements, batterTo, { withError, withFc })
       if (!ev.ok) return ev
+
+      // 守備路線只在有出局或失誤上壘時才存；失誤來源只在有失誤時才存
+      const hasError = result === 'E' || ev.record.with_error
+      const extra = {
+        fielding: allowsFielding(result, ev.record.outs_added) ? fieldingString(fielding) : null,
+        error_by: hasError && errorBy ? Number(errorBy) : null,
+        error_kind: hasError && errorKind ? errorKind : null,
+      }
 
       const row = {
         id: queue.newId(),
@@ -185,12 +210,14 @@ export function useScoringGame(game) {
         hit_type: height || null,
         hit_direction: direction || null,
         ...ev.record,
+        ...extra,
         description: describePlateAppearance({
           result,
           batter: currentBatter,
           hit_direction: direction || null,
           hit_type: height || null,
           ...ev.record,
+          ...extra,
         }),
       }
 

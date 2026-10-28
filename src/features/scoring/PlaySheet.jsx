@@ -2,14 +2,18 @@ import { useState } from 'react'
 import {
   DETAIL_REQUIRED,
   DIRECTION_OPTIONS,
+  ERROR_KIND_OPTIONS,
   HAS_BATTED_BALL,
   HEIGHT_OPTIONS,
   HIT_BASE,
   RESULT_MAP,
   SIDE_PLAY_ALLOWED,
+  allowsFielding,
   validateDetails,
 } from '../../utils/plateAppearance'
-import { BASE_NAMES, playerLabel, runnerLabel } from '../../utils/formatters'
+import { BASE_NAMES, describeFielding, fieldingNotation, playerLabel, runnerLabel } from '../../utils/formatters'
+
+const MAX_ROUTE = 6 // 守備路線最多幾個守備員
 
 const DEST_LABEL = { 0: '出局', 1: '一壘', 2: '二壘', 3: '三壘', 4: '得分' }
 
@@ -26,7 +30,7 @@ const chipClass = (active) =>
   }`
 
 /**
- * 打席確認畫面：擊球方向與高度、附有失誤／野選、跑者去向，一次確認
+ * 打席確認畫面：擊球方向與高度、出局的守備路線、失誤來源、附有失誤／野選、跑者去向，一次確認
  * @param {object} initial  { movements, batterTo, direction, height } 預設值
  * @param {(result, movements, batterTo, extras) => object} preview  驗證並試算（不寫入）
  * @param {(details: object) => void} onConfirm
@@ -38,6 +42,10 @@ export default function PlaySheet({ result, bases, batter, initial, preview, onC
   const [height, setHeight] = useState(initial.height ?? '')
   const [withError, setWithError] = useState(false)
   const [withFc, setWithFc] = useState(false)
+  const [fielding, setFielding] = useState([]) // 守備路線：[6, 3] = 游擊手傳一壘手
+  const [fieldingAuto, setFieldingAuto] = useState(false) // 目前的路線只是依擊球方向自動帶入的
+  const [errorBy, setErrorBy] = useState('') // 失誤的守備員編號
+  const [errorKind, setErrorKind] = useState('') // catch 接球 / throw 傳球 / field 處理
 
   const hasBall = HAS_BATTED_BALL.has(result)
   const required = DETAIL_REQUIRED.has(result)
@@ -52,6 +60,9 @@ export default function PlaySheet({ result, bases, batter, initial, preview, onC
   const evaluation = preview(result, movements, batterTo, { withError, withFc })
   const detailProblem = validateDetails(result, { direction, height })
   const canConfirm = evaluation.ok && !detailProblem
+  // 有出局（三振除外）或失誤上壘，才問守備路線；有失誤才問失誤來源
+  const showFielding = allowsFielding(result, evaluation.ok ? evaluation.record.outs_added : 0)
+  const showError = result === 'E' || withError
 
   const setDest = (from, to) =>
     setMovements((list) => list.map((m) => (m.from === from ? { ...m, to } : m)))
@@ -59,7 +70,34 @@ export default function PlaySheet({ result, bases, batter, initial, preview, onC
   function toggleError() {
     const next = !withError
     setWithError(next)
-    if (!next && hitBase) setBatterTo(initial.batterTo) // 取消失誤：打者回到安打的壘包
+    if (!next) {
+      setErrorBy('')
+      setErrorKind('')
+      if (hitBase) setBatterTo(initial.batterTo) // 取消失誤：打者回到安打的壘包
+    }
+  }
+
+  function pickDirection(option) {
+    const next = direction === option.value ? '' : option.value
+    setDirection(next)
+    // 路線還沒動過：把第一個守備員帶成球去的方向（飛球、平飛接殺只要這一步就完成了）
+    if (fielding.length === 0 || fieldingAuto) {
+      setFielding(next ? [option.num] : [])
+      setFieldingAuto(true)
+    }
+  }
+
+  const addFielder = (num) => {
+    setFielding((list) => (list.length >= MAX_ROUTE ? list : [...list, num]))
+    setFieldingAuto(false)
+  }
+  const removeLastFielder = () => {
+    setFielding((list) => list.slice(0, -1))
+    setFieldingAuto(false)
+  }
+  const clearFielding = () => {
+    setFielding([])
+    setFieldingAuto(false)
   }
 
   const rows = [...movements].sort((a, b) => b.from - a.from) // 跑在前面的先列
@@ -88,7 +126,7 @@ export default function PlaySheet({ result, bases, batter, initial, preview, onC
                   aria-pressed={direction === o.value}
                   aria-label={o.name}
                   title={o.name}
-                  onClick={() => setDirection(direction === o.value ? '' : o.value)}
+                  onClick={() => pickDirection(o)}
                   className={chipClass(direction === o.value)}
                 >
                   {o.label}
@@ -118,6 +156,65 @@ export default function PlaySheet({ result, bases, batter, initial, preview, onC
         </>
       )}
 
+      {showFielding && (
+        <fieldset>
+          <legend className="mb-1.5 text-xs font-semibold text-stone-600">
+            {result === 'E' ? '失誤的守備路線' : '出局怎麼產生（守備路線）'}
+            {tag('選填，依序點選守備員')}
+          </legend>
+          <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-white px-3 py-2 ring-1 ring-stone-200">
+            {fielding.length === 0 ? (
+              <span className="text-sm text-stone-400">尚未選擇</span>
+            ) : (
+              <>
+                <span className="text-lg font-semibold tabular-nums text-stone-900">
+                  {fieldingNotation(fielding, height, { error: result === 'E' })}
+                </span>
+                {result !== 'E' && (
+                  <span className="text-sm text-stone-600">{describeFielding(fielding, { height, result })}</span>
+                )}
+              </>
+            )}
+            <span className="ml-auto flex gap-3">
+              <button
+                type="button"
+                disabled={fielding.length === 0}
+                onClick={removeLastFielder}
+                className="text-sm text-emerald-800 hover:underline disabled:text-stone-300 disabled:no-underline"
+              >
+                退一步
+              </button>
+              <button
+                type="button"
+                disabled={fielding.length === 0}
+                onClick={clearFielding}
+                className="text-sm text-emerald-800 hover:underline disabled:text-stone-300 disabled:no-underline"
+              >
+                清除
+              </button>
+            </span>
+          </div>
+          <div className="grid grid-cols-5 gap-2">
+            {DIRECTION_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                aria-label={o.name}
+                title={o.name}
+                disabled={fielding.length >= MAX_ROUTE}
+                onClick={() => addFielder(o.num)}
+                className={`${chipClass(false)} disabled:opacity-40`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1.5 text-xs text-stone-500">
+            例如游擊手傳一壘手：先點「游」再點「一」，記成 6-3。選擊球方向時會先帶入第一位。
+          </p>
+        </fieldset>
+      )}
+
       {allowSidePlay && (
         <fieldset>
           <legend className="mb-1.5 text-xs font-semibold text-stone-600">附加情況{tag('沒有就不用選')}</legend>
@@ -132,6 +229,42 @@ export default function PlaySheet({ result, bases, batter, initial, preview, onC
           {(withError || withFc) && showRunners && (
             <p className="mt-1.5 text-xs text-stone-500">請在下方確認打者與跑者的實際去向。</p>
           )}
+        </fieldset>
+      )}
+
+      {showError && (
+        <fieldset>
+          <legend className="mb-1.5 text-xs font-semibold text-stone-600">失誤從何而來{tag('選填')}</legend>
+          <p className="mb-1.5 text-xs text-stone-500">哪一位守備員失誤</p>
+          <div className="grid grid-cols-5 gap-2">
+            {DIRECTION_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                aria-pressed={errorBy === o.num}
+                aria-label={o.name}
+                title={o.name}
+                onClick={() => setErrorBy(errorBy === o.num ? '' : o.num)}
+                className={chipClass(errorBy === o.num)}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          <p className="mb-1.5 mt-3 text-xs text-stone-500">失誤類型</p>
+          <div className="grid grid-cols-3 gap-2">
+            {ERROR_KIND_OPTIONS.map((o) => (
+              <button
+                key={o.value}
+                type="button"
+                aria-pressed={errorKind === o.value}
+                onClick={() => setErrorKind(errorKind === o.value ? '' : o.value)}
+                className={chipClass(errorKind === o.value)}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
         </fieldset>
       )}
 
@@ -204,7 +337,7 @@ export default function PlaySheet({ result, bases, batter, initial, preview, onC
         <button
           type="button"
           disabled={!canConfirm}
-          onClick={() => onConfirm({ movements, batterTo, direction, height, withError, withFc })}
+          onClick={() => onConfirm({ movements, batterTo, direction, height, withError, withFc, fielding, errorBy, errorKind })}
           className="flex-1 rounded-md bg-emerald-800 px-4 py-2.5 font-medium text-white hover:bg-emerald-900 disabled:opacity-50"
         >
           確認記錄

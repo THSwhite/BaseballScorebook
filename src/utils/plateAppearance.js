@@ -54,16 +54,16 @@ const NO_RBI = new Set(['E', 'DP']) // 這兩種不記打點
 /* ---------- 擊球方向、高度、附加情況（extra2 打擊習慣用）---------- */
 // 方向 = 球往哪個守備位置去（存進 plate_appearances.hit_direction）
 export const DIRECTION_OPTIONS = [
-  { value: '1B', label: '一', name: '一壘' },
-  { value: '2B', label: '二', name: '二壘' },
-  { value: '3B', label: '三', name: '三壘' },
-  { value: 'SS', label: '游', name: '游擊' },
-  { value: 'P', label: '投', name: '投手' },
-  { value: 'C', label: '捕', name: '捕手' },
-  { value: 'LF', label: '左', name: '左外野' },
-  { value: 'CF', label: '中', name: '中外野' },
-  { value: 'RF', label: '右', name: '右外野' },
-  { value: 'SF', label: '自由', name: '自由球員' },
+  { value: '1B', label: '一', name: '一壘', num: 3 },
+  { value: '2B', label: '二', name: '二壘', num: 4 },
+  { value: '3B', label: '三', name: '三壘', num: 5 },
+  { value: 'SS', label: '游', name: '游擊', num: 6 },
+  { value: 'P', label: '投', name: '投手', num: 1 },
+  { value: 'C', label: '捕', name: '捕手', num: 2 },
+  { value: 'LF', label: '左', name: '左外野', num: 7 },
+  { value: 'CF', label: '中', name: '中外野', num: 8 },
+  { value: 'RF', label: '右', name: '右外野', num: 9 },
+  { value: 'SF', label: '自由', name: '自由球員', num: 10 },
 ]
 // 高度（存進 plate_appearances.hit_type）
 export const HEIGHT_OPTIONS = [
@@ -88,6 +88,25 @@ export function validateDetails(result, { direction, height } = {}) {
   if (!direction) return '請選擇擊球方向'
   if (!height) return '請選擇擊球高度'
   return ''
+}
+
+/* ---------- 出局怎麼產生、失誤從何而來（選填）---------- */
+// 失誤類型（存進 plate_appearances.error_kind）
+export const ERROR_KIND_OPTIONS = [
+  { value: 'catch', label: '接球失誤' },
+  { value: 'throw', label: '傳球失誤' },
+  { value: 'field', label: '處理失誤' },
+]
+
+/** 這個打席要不要問「守備路線」：有出局（三振除外），或是失誤上壘 */
+export function allowsFielding(result, outsAdded) {
+  return result !== 'K' && (outsAdded > 0 || result === 'E')
+}
+
+/** 守備路線 [6, 3] → '6-3'（只收 1～10 的整數，最多 6 個）；沒有就回傳 null */
+export function fieldingString(seq) {
+  const clean = (seq ?? []).map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 10).slice(0, 6)
+  return clean.length ? clean.join('-') : null
 }
 
 /* ---------- 狀態 ---------- */
@@ -360,8 +379,26 @@ export function rowToPa(row) {
 }
 
 /**
+ * 換人對比賽狀態的影響：進攻方壘上的跑者如果被換掉（代跑），壘包上改成新球員，
+ * 之後的得分就會算在新球員身上。其他換人只影響打線，不影響這裡。
+ */
+export function applySubsToState(state, subs = []) {
+  const side = state.half === 'top' ? 'away' : 'home'
+  let bases = state.bases
+  for (const c of subs) {
+    if (c.type === 'swap' || c.side !== side) continue
+    bases = bases.map((b) =>
+      b && b.order === c.order
+        ? { order: c.order, name: c.name ?? '', number: c.number ?? null, playerId: c.playerId ?? null }
+        : b
+    )
+  }
+  return bases === state.bases ? state : { ...state, bases }
+}
+
+/**
  * 把所有紀錄依序重播，得到目前的比賽狀態
- * 紀錄有三種：pa 打席（預設）、note 備註（不影響比賽）、set 更改連續打幾個半局
+ * 紀錄有四種：pa 打席（預設）、note 備註（不影響比賽）、set 更改連續打幾個半局、sub 換人
  * @param ctx { innings, lineupSize, initialSetSize }
  */
 export function replay(rows, ctx = {}) {
@@ -369,6 +406,10 @@ export function replay(rows, ctx = {}) {
   for (const row of rows) {
     const kind = row.kind ?? 'pa'
     if (kind === 'note') continue
+    if (kind === 'sub') {
+      state = applySubsToState(state, row.subs)
+      continue
+    }
     if (kind === 'set') {
       if (row.set_size === 1 || row.set_size === 2) state = applySetSize(state, row.set_size, ctx)
       continue

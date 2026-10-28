@@ -40,6 +40,12 @@ function PlayRow({ play, game, isLatest }) {
         <p className="flex flex-wrap items-center gap-2 text-xs text-stone-500">
           {batterLine(play)}
           {isLatest && <span className="rounded bg-amber-400 px-1.5 py-0.5 text-[10px] font-bold text-white">最新</span>}
+          {play.fielding && (
+            <span className="rounded bg-stone-100 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-stone-600">
+              {play.fielding}
+              {(play.result === 'E' || play.with_error) && 'E'}
+            </span>
+          )}
           {play.with_error && <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">失誤</span>}
           {play.with_fc && <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">野選</span>}
         </p>
