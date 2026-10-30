@@ -31,21 +31,32 @@ const chipClass = (active) =>
 
 /**
  * 打席確認畫面：擊球方向與高度、出局的守備路線、失誤來源、附有失誤／野選、跑者去向，一次確認
- * @param {object} initial  { movements, batterTo, direction, height } 預設值
+ * @param {object} initial  預設值：{ movements, batterTo, direction, height }
+ *                          修改歷史時還可以帶入 { withError, withFc, fielding, errorBy, errorKind }
  * @param {(result, movements, batterTo, extras) => object} preview  驗證並試算（不寫入）
  * @param {(details: object) => void} onConfirm
+ * @param {string} [confirmLabel]  確認按鈕的文字
  */
-export default function PlaySheet({ result, bases, batter, initial, preview, onConfirm, onCancel }) {
+export default function PlaySheet({
+  result,
+  bases,
+  batter,
+  initial,
+  preview,
+  onConfirm,
+  onCancel,
+  confirmLabel = '確認記錄',
+}) {
   const [movements, setMovements] = useState(initial.movements)
   const [batterTo, setBatterTo] = useState(initial.batterTo)
   const [direction, setDirection] = useState(initial.direction ?? '')
   const [height, setHeight] = useState(initial.height ?? '')
-  const [withError, setWithError] = useState(false)
-  const [withFc, setWithFc] = useState(false)
-  const [fielding, setFielding] = useState([]) // 守備路線：[6, 3] = 游擊手傳一壘手
+  const [withError, setWithError] = useState(!!initial.withError)
+  const [withFc, setWithFc] = useState(!!initial.withFc)
+  const [fielding, setFielding] = useState(initial.fielding ?? []) // 守備路線：[6, 3] = 游擊手傳一壘手
   const [fieldingAuto, setFieldingAuto] = useState(false) // 目前的路線只是依擊球方向自動帶入的
-  const [errorBy, setErrorBy] = useState('') // 失誤的守備員編號
-  const [errorKind, setErrorKind] = useState('') // catch 接球 / throw 傳球 / field 處理
+  const [errorBy, setErrorBy] = useState(initial.errorBy ?? '') // 失誤的守備員編號
+  const [errorKind, setErrorKind] = useState(initial.errorKind ?? '') // catch 接球 / throw 傳球 / field 處理
 
   const hasBall = HAS_BATTED_BALL.has(result)
   const required = DETAIL_REQUIRED.has(result)
@@ -73,7 +84,7 @@ export default function PlaySheet({ result, bases, batter, initial, preview, onC
     if (!next) {
       setErrorBy('')
       setErrorKind('')
-      if (hitBase) setBatterTo(initial.batterTo) // 取消失誤：打者回到安打的壘包
+      if (hitBase) setBatterTo(hitBase) // 取消失誤：打者回到安打的壘包
     }
   }
 
@@ -340,7 +351,7 @@ export default function PlaySheet({ result, bases, batter, initial, preview, onC
           onClick={() => onConfirm({ movements, batterTo, direction, height, withError, withFc, fielding, errorBy, errorKind })}
           className="flex-1 rounded-md bg-emerald-800 px-4 py-2.5 font-medium text-white hover:bg-emerald-900 disabled:opacity-50"
         >
-          確認記錄
+          {confirmLabel}
         </button>
         <button
           type="button"

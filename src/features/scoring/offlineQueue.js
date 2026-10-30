@@ -6,9 +6,10 @@
  *   1. 先更新畫面、把要送出的動作放進佇列（存在 localStorage，重新整理也不會掉）
  *   2. 背景依序送出；斷線就停住，恢復連線後自動繼續
  *
- * 佇列裡有三種動作：
+ * 佇列裡有四種動作：
  *   insert：新增一個打席（用 id 去重，重複送出不會寫兩次）
- *   delete：刪除一個打席（復原時，而且該打席已經送上去了）
+ *   upsert：覆蓋一個已存在的打席（修改歷史用；同一筆只留最新的）
+ *   delete：刪除一個打席（復原、修改歷史刪除時，而且該打席已經送上去了）
  *   game  ：更新比分與狀態（同一場只留最新一筆）
  */
 import { supabase } from '../../lib/supabase'
@@ -60,27 +61,36 @@ export function enqueue(op) {
   if (op.type === 'game') {
     queue = queue.filter((o) => !(o.type === 'game' && o.gameId === op.gameId))
   }
+  if (op.type === 'upsert') {
+    // 同一筆還沒送出的 upsert 只留最新的
+    queue = queue.filter((o) => !(o.type === 'upsert' && o.row.id === op.row.id && o.opId !== inFlight))
+  }
   queue.push({ opId: newId(), ...op })
   save(QUEUE_KEY, queue)
   flush()
 }
 
 /**
- * 復原時呼叫：如果該打席還沒送出去，直接從佇列拿掉（回傳 true）；
+ * 復原或刪除時呼叫：如果該打席還沒送出去，直接從佇列拿掉（回傳 true）；
  * 已經送出或正在送出，就回傳 false，由呼叫端另外排一個 delete。
+ * 同一筆還沒送出的 upsert 也會一併拿掉（否則刪掉之後又被寫回去）。
  */
 export function removeInsert(rowId) {
   const queue = getQueue()
-  const next = queue.filter((o) => !(o.type === 'insert' && o.row.id === rowId && o.opId !== inFlight))
-  if (next.length === queue.length) return false
-  save(QUEUE_KEY, next)
-  return true
+  const isMine = (o) =>
+    (o.type === 'insert' || o.type === 'upsert') && o.row.id === rowId && o.opId !== inFlight
+  const hadInsert = queue.some((o) => o.type === 'insert' && isMine(o))
+  const next = queue.filter((o) => !isMine(o))
+  if (next.length !== queue.length) save(QUEUE_KEY, next)
+  return hadInsert
 }
 
 function run(op) {
   switch (op.type) {
     case 'insert':
       return supabase.from(op.table).upsert(op.row, { onConflict: 'id', ignoreDuplicates: true })
+    case 'upsert':
+      return supabase.from(op.table).upsert(op.row, { onConflict: 'id' })
     case 'delete':
       return supabase.from(op.table).delete().eq('id', op.id)
     case 'game':

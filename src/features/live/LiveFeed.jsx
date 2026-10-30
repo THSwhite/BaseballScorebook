@@ -94,6 +94,7 @@ function SetRow({ item }) {
 /**
  * 逐打席文字轉播：依半局分組，最新的在最上面，可以用局數篩選
  * 每組的 items 依時間順序放打席、備註、set 更改（見 gameSummary.buildFeed）
+ * 2set 時每一局本來就是獨立的一組（1上、2上、1下、2下），不需要額外標示第幾個半局
  */
 export default function LiveFeed({ game, state, groups, finished }) {
   const [filter, setFilter] = useState('all')
@@ -118,10 +119,7 @@ export default function LiveFeed({ game, state, groups, finished }) {
       ]
     : groups
 
-  // 2set：同一隊同一局有兩個半局時，標題要寫第幾個半局
-  const multiSet = new Set(allGroups.filter((g) => g.setNo > 1).map((g) => `${g.inning}-${g.half}`))
-
-  const inningList = [...new Set(allGroups.map((g) => g.inning))]
+  const inningList = [...new Set(allGroups.map((g) => g.inning))].sort((a, b) => a - b)
   const visible = allGroups.filter((g) => filter === 'all' || g.inning === filter).reverse()
 
   // 「最新」標記放在最後一個打席
@@ -158,9 +156,6 @@ export default function LiveFeed({ game, state, groups, finished }) {
           <header className="flex items-center justify-between gap-3 bg-stone-100 px-3 py-2">
             <h3 className="font-semibold text-stone-900">
               {g.inning} 局{g.half === 'top' ? '上' : '下'}
-              {multiSet.has(`${g.inning}-${g.half}`) && (
-                <span className="ml-1 text-sm font-normal text-stone-600">・第 {g.setNo} 個半局</span>
-              )}
               <span className="ml-2 text-sm font-normal text-stone-600">
                 {g.side === 'away' ? game.away_team : game.home_team} 進攻
               </span>

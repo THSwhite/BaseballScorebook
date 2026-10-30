@@ -9,11 +9,11 @@ import { samePlayer } from './lineup'
 // 不算打數的結果：四壞球、觸身球、犧牲打、犧牲觸擊
 const NOT_AB = new Set(['BB', 'HBP', 'SF', 'SH'])
 
-/** 紀錄的種類：pa 打席（舊資料沒有 kind，也當作打席）、note 備註、set 更改連續打幾個半局 */
+/** 紀錄的種類：pa 打席（舊資料沒有 kind，也當作打席）、note 備註、set 更改一次連打幾局、sub 換人 */
 export const isPA = (e) => (e.kind ?? 'pa') === 'pa'
 
 /**
- * 依半局分組（2set 時同一隊的兩個半局會分成兩組）。
+ * 依半局分組（2set 時同一隊連打的兩局會分成兩組）。
  * 每組的 items 依時間順序（由舊到新）放打席、備註、set 更改；打席附上結束後的比分與出局數。
  */
 export function buildFeed(events) {
@@ -57,13 +57,19 @@ export function teamTotals(events) {
   return t
 }
 
-/** 局數比分表某一格要顯示什麼 */
+/**
+ * 局數比分表某一格要顯示什麼
+ * 2set 時後攻打 1 下，客隊的 1、2 局都已經打完，所以不能只用「局數小於目前局」判斷，
+ * 改成看這一格有沒有實際打過。
+ */
 export function lineScoreCell(state, side, inning) {
   const value = state.lineScore[side][inning - 1]
-  if (inning < state.inning) return value ?? 0
-  if (inning > state.inning) return ''
-  if (side === 'away' || state.half === 'bottom') return value ?? 0
-  return state.over ? 'X' : '' // 後攻還沒打：比賽已結束就是 X（不用打）
+  const batting = state.half === 'top' ? 'away' : 'home'
+  if (!state.over && side === batting && inning === state.inning) return value ?? 0 // 正在打的半局
+  if (value !== undefined) return value // 已經打過
+  // 後攻不用打（上半結束時後攻已領先）：比賽結束就是 X
+  if (state.over && side === 'home' && inning === state.inning && state.half === 'top') return 'X'
+  return ''
 }
 
 /**

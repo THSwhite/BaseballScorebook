@@ -6,7 +6,7 @@ import { fetchTeams } from '../teams/teamsApi'
 const INNING_OPTIONS = [5, 7, 9]
 const SET_OPTIONS = [
   { value: 1, title: '1set', hint: '正常進行，上下半局輪流' },
-  { value: 2, title: '2set', hint: '每隊連續打兩個半局' },
+  { value: 2, title: '2set', hint: '每隊一次打兩局：1上、2上、1下、2下' },
 ]
 
 function todayString() {
@@ -217,7 +217,7 @@ export default function CreateGameForm({ onCreated }) {
             )
           })}
         </div>
-        <p className="mt-1 text-xs text-stone-500">記錄時，每次換局都可以隨時調整。</p>
+        <p className="mt-1 text-xs text-stone-500">記錄時，每次新的一輪開始都可以調整。</p>
       </fieldset>
 
       {error && (

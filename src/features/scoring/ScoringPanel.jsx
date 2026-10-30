@@ -4,6 +4,7 @@ import BaseDiamond from './BaseDiamond'
 import ResultButtons from './ResultButtons'
 import PlaySheet from './PlaySheet'
 import SubstitutionPanel from './SubstitutionPanel'
+import HistoryPanel from './HistoryPanel'
 import { useScoringGame } from './useScoringGame'
 import {
   HAS_BATTED_BALL,
@@ -11,6 +12,7 @@ import {
   defaultHeight,
   defaultOutcome,
 } from '../../utils/plateAppearance'
+import { lineScoreCell } from '../../utils/gameSummary'
 
 // 沒有擊球的結果（三振、保送、觸身球）：就算有跑者也直接記錄，跑者去向固定。
 // 有擊球的結果一律先開確認畫面（要選方向、高度，跑者去向也在同一個畫面）
@@ -23,13 +25,6 @@ function LineScore({ game, state, events }) {
   const cols = Math.max(game.innings ?? 9, state.inning)
   const innings = Array.from({ length: cols }, (_, i) => i + 1)
 
-  function cell(side, i) {
-    const value = state.lineScore[side][i - 1]
-    if (i < state.inning) return value ?? 0
-    if (i > state.inning) return ''
-    if (side === 'away' || state.half === 'bottom') return value ?? 0
-    return state.over ? 'X' : '' // 後攻還沒打：比賽已結束就是 X
-  }
   const hits = (side) =>
     events.filter((e) => HIT_RESULTS.has(e.result) && e.half === (side === 'away' ? 'top' : 'bottom')).length
 
@@ -63,7 +58,7 @@ function LineScore({ game, state, events }) {
                 {side === 'away' ? game.away_team : game.home_team}
               </td>
               {innings.map((i) => (
-                <td key={i} className="px-2 py-1.5">{cell(side, i)}</td>
+                <td key={i} className="px-2 py-1.5">{lineScoreCell(state, side, i)}</td>
               ))}
               <td className="px-2 py-1.5 font-bold text-stone-900">{state.score[side]}</td>
               <td className="px-2 py-1.5 text-stone-700">{hits(side)}</td>
@@ -102,7 +97,7 @@ function SyncStatus({ sync }) {
   )
 }
 
-/* ---------- 每隊連續打幾個半局：1set / 2set ---------- */
+/* ---------- 每隊一次連打幾局：1set / 2set ---------- */
 function SetControl({ state, battingTeam, atBoundary, onChange }) {
   const option = (size, title, hint) => {
     const active = state.setSize === size
@@ -123,19 +118,19 @@ function SetControl({ state, battingTeam, atBoundary, onChange }) {
 
   return (
     <section
-      aria-label="每隊連續打幾個半局"
+      aria-label="每隊一次連打幾局"
       className={`space-y-2 rounded-lg border p-3 ${atBoundary ? 'border-amber-300 bg-amber-50' : 'border-stone-200 bg-white'}`}
     >
       <p className="text-sm font-medium text-stone-800">
-        {atBoundary ? `換局了：${battingTeam} 進攻，要調整連續打幾個半局嗎？` : '每隊連續打幾個半局'}
+        {atBoundary ? `新的一輪開始：${battingTeam} 進攻，要調整一次連打幾局嗎？` : '每隊一次連打幾局'}
       </p>
       <div className="flex gap-2">
         {option(1, '1set', '輪流打')}
-        {option(2, '2set', '連續打兩個半局')}
+        {option(2, '2set', '一次打兩局')}
       </div>
-      {state.setSize > 1 && (
+      {(state.setSize > 1 || state.blockSize > 1) && (
         <p className="text-xs text-stone-500">
-          目前是 {battingTeam} 的第 {state.setNo} / {state.setSize} 個半局。改成 1set，這個半局結束（或現在剛好換局時）就會換邊。
+          目前是 {battingTeam} 連打的第 {state.setNo} / {state.blockSize} 局。更改設定會從下一輪開始生效，剛好在新一輪開始時則立刻生效。
         </p>
       )}
     </section>
@@ -186,6 +181,7 @@ export default function ScoringPanel({ game }) {
   const g = useScoringGame(game)
   const [adjusting, setAdjusting] = useState(null) // { result, movements, batterTo }
   const [subOpen, setSubOpen] = useState(false) // 更換選手面板
+  const [historyOpen, setHistoryOpen] = useState(false) // 修改歷史面板
   const [alwaysConfirm, setAlwaysConfirm] = useState(false)
   const [message, setMessage] = useState('')
 
@@ -197,8 +193,9 @@ export default function ScoringPanel({ game }) {
   const side = state.half === 'top' ? 'away' : 'home'
   const battingTeam = side === 'away' ? game.away_team : game.home_team
   const lastEvent = events[events.length - 1]
-  // 剛換局（這個半局還沒有打席）：提醒可以調整 1set / 2set
-  const atBoundary = !g.finished && g.paCount > 0 && state.halfPlays === 0
+  // 新的一輪剛開始（上半、這一輪第一局、還沒有打席）：提醒可以調整 1set / 2set
+  const atBoundary =
+    !g.finished && g.paCount > 0 && state.halfPlays === 0 && state.half === 'top' && state.setNo === 1
 
   // details：{ movements, batterTo, direction, height, withError, withFc }
   function commit(result, details) {
@@ -262,7 +259,7 @@ export default function ScoringPanel({ game }) {
         <section className="space-y-3">
           <p className="text-sm font-medium text-stone-700">
             {state.inning} 局{state.half === 'top' ? '上' : '下'}・{battingTeam} 進攻
-            {state.setSize > 1 && `（第 ${state.setNo} / ${state.setSize} 個半局）`}
+            {state.blockSize > 1 && `（連打第 ${state.setNo} / ${state.blockSize} 局）`}
           </p>
           <BaseDiamond bases={state.bases} outs={state.outs} />
 
@@ -289,6 +286,7 @@ export default function ScoringPanel({ game }) {
               aria-pressed={subOpen}
               onClick={() => {
                 setAdjusting(null)
+                setHistoryOpen(false)
                 setSubOpen((v) => !v)
               }}
               className={`w-full rounded-md px-4 py-2.5 text-sm font-medium ${
@@ -299,6 +297,22 @@ export default function ScoringPanel({ game }) {
             </button>
           )}
 
+          {/* 比賽結束後也可以修改歷史 */}
+          <button
+            type="button"
+            aria-pressed={historyOpen}
+            onClick={() => {
+              setAdjusting(null)
+              setSubOpen(false)
+              setHistoryOpen((v) => !v)
+            }}
+            className={`w-full rounded-md px-4 py-2.5 text-sm font-medium ${
+              historyOpen ? 'bg-emerald-800 text-white' : 'border border-stone-300 bg-white text-stone-800 hover:bg-stone-50'
+            }`}
+          >
+            修改歷史
+          </button>
+
           {!g.finished && (
             <SetControl state={state} battingTeam={battingTeam} atBoundary={atBoundary} onChange={g.changeSetSize} />
           )}
@@ -306,7 +320,17 @@ export default function ScoringPanel({ game }) {
 
         {/* 右：記錄 */}
         <section className="space-y-4">
-          {subOpen ? (
+          {historyOpen ? (
+            <HistoryPanel
+              game={game}
+              events={events}
+              state={state}
+              startLineups={g.startLineups}
+              ctx={g.ctx}
+              onApply={g.applyHistory}
+              onClose={() => setHistoryOpen(false)}
+            />
+          ) : subOpen ? (
             <SubstitutionPanel
               game={game}
               lineups={g.lineups}

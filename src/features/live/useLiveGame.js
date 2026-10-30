@@ -93,6 +93,8 @@ export function useLiveGame(gameId) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'plate_appearances' }, (payload) => {
         // 刪除通知只帶主鍵，所以不能用 game_id 過濾，改在這裡判斷是不是這場比賽的資料
         if (payload.eventType === 'INSERT' && payload.new.game_id === gameId) scheduleRefresh()
+        // 修改歷史會更新既有的打席（內容、棒次、seq）
+        if (payload.eventType === 'UPDATE' && payload.new.game_id === gameId) scheduleRefresh()
         if (payload.eventType === 'DELETE' && eventsRef.current.some((e) => e.id === payload.old?.id)) scheduleRefresh()
       })
       .on(

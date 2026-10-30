@@ -50,12 +50,12 @@ function toLineups(rows) {
   return out
 }
 
-// 伺服器資料 + 還沒送出的新增 − 還沒送出的刪除
+// 伺服器資料 + 還沒送出的新增與修改 − 還沒送出的刪除
 function mergeWithQueue(serverRows, gameId) {
   const ops = queue.getQueue()
   const deleted = new Set(ops.filter((o) => o.type === 'delete').map((o) => o.id))
   const pendingRows = ops
-    .filter((o) => o.type === 'insert' && o.row.game_id === gameId)
+    .filter((o) => (o.type === 'insert' || o.type === 'upsert') && o.row.game_id === gameId)
     .map((o) => o.row)
   const byId = new Map()
   for (const row of [...serverRows, ...pendingRows]) {
@@ -72,7 +72,7 @@ const gamePatch = (state, eventCount) => ({
 
 /**
  * 逐打席記錄的狀態中心
- * 回傳：目前局面、目前打者、record / undo、同步狀態…
+ * 回傳：目前局面、目前打者、record / undo、修改歷史、同步狀態…
  */
 export function useScoringGame(game) {
   const [events, setEvents] = useState(() => readJson(eventsKey(game.id), []))
@@ -307,7 +307,7 @@ export function useScoringGame(game) {
     [makeRow, pushRow]
   )
 
-  /** 更改「每隊連續打幾個半局」（1 = 輪流，2 = 連續兩個半局） */
+  /** 更改「每隊一次連打幾局」（1 = 輪流，2 = 一次打兩局：1上、2上、1下、2下） */
   const changeSetSize = useCallback(
     (size) => {
       if (finished || (size !== 1 && size !== 2) || size === state.setSize) return
@@ -316,7 +316,9 @@ export function useScoringGame(game) {
           result: 'SET',
           set_size: size,
           description:
-            size === 2 ? '改為 2set：每隊連續打 2 個半局。' : '改為 1set：每隊輪流打 1 個半局。',
+            size === 2
+              ? '改為 2set：每隊一次打 2 局（1上、2上、1下、2下）。'
+              : '改為 1set：每隊輪流打 1 局。',
         })
       )
     },
@@ -340,10 +342,44 @@ export function useScoringGame(game) {
     [finished, lineupState, lineups, side, state.bases, game.away_team, game.home_team, makeRow, pushRow]
   )
 
+  /**
+   * 修改歷史：把重新推算後的整串紀錄寫回（見 utils/history.js 的 rebuildTimeline）。
+   * 只送出有變動的列：新增的用 insert、改過的用 upsert、不見的用 delete；seq 已經重新編號。
+   */
+  const applyHistory = useCallback(
+    (newRows) => {
+      touched.current = true
+      const oldById = new Map(events.map((e) => [e.id, e]))
+      const keep = new Set(newRows.map((r) => r.id))
+
+      for (const e of events) {
+        if (!keep.has(e.id) && !queue.removeInsert(e.id)) {
+          queue.enqueue({ type: 'delete', table: TABLE, id: e.id })
+        }
+      }
+      for (const row of newRows) {
+        const old = oldById.get(row.id)
+        if (!old) queue.enqueue({ type: 'insert', table: TABLE, row })
+        else if (JSON.stringify(old) !== JSON.stringify(row)) queue.enqueue({ type: 'upsert', table: TABLE, row })
+      }
+
+      setEvents(newRows)
+      const patch = gamePatch(replay(newRows, ctx), newRows.filter(isPA).length)
+      queue.enqueue({
+        type: 'game',
+        gameId: game.id,
+        patch: manualFinished ? { ...patch, status: 'finished' } : patch,
+      })
+    },
+    [events, ctx, game.id, manualFinished]
+  )
+
   return {
     loading,
     error,
     lineups,
+    startLineups,
+    ctx,
     retired: lineupState.retired,
     events,
     paCount,
@@ -357,6 +393,7 @@ export function useScoringGame(game) {
     addNote,
     changeSetSize,
     substitute,
+    applyHistory,
     finishGame,
     reopenGame,
     sync: { online, pending, failed, retry: queue.flush, clearFailed: queue.clearFailed },
