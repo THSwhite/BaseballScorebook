@@ -72,6 +72,18 @@ function NoteRow({ note }) {
   )
 }
 
+/* ---------- 換人 ---------- */
+function SubRow({ item }) {
+  return (
+    <li className="flex gap-3 border-l-4 border-violet-400 bg-violet-50 px-3 py-3">
+      <div className="w-[4.75rem] shrink-0 text-center">
+        <span className="block rounded bg-violet-600 px-1.5 py-1 text-xs font-semibold text-white">換人</span>
+      </div>
+      <p className="min-w-0 flex-1 break-words text-stone-900">{item.description}</p>
+    </li>
+  )
+}
+
 /* ---------- 更改 1set / 2set ---------- */
 function SetRow({ item }) {
   return (
@@ -165,6 +177,7 @@ export default function LiveFeed({ game, state, groups, finished }) {
               {[...g.items].reverse().map((item) => {
                 if (item.kind === 'note') return <NoteRow key={item.id} note={item} />
                 if (item.kind === 'set') return <SetRow key={item.id} item={item} />
+                if (item.kind === 'sub') return <SubRow key={item.id} item={item} />
                 return <PlayRow key={item.id} play={item} game={game} isLatest={item.id === latestId && !finished} />
               })}
             </ul>

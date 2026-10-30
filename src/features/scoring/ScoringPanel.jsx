@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import BaseDiamond from './BaseDiamond'
 import ResultButtons from './ResultButtons'
 import PlaySheet from './PlaySheet'
+import SubstitutionPanel from './SubstitutionPanel'
 import { useScoringGame } from './useScoringGame'
 import {
   HAS_BATTED_BALL,
@@ -184,6 +185,7 @@ function NoteBox({ onSend }) {
 export default function ScoringPanel({ game }) {
   const g = useScoringGame(game)
   const [adjusting, setAdjusting] = useState(null) // { result, movements, batterTo }
+  const [subOpen, setSubOpen] = useState(false) // 更換選手面板
   const [alwaysConfirm, setAlwaysConfirm] = useState(false)
   const [message, setMessage] = useState('')
 
@@ -282,13 +284,38 @@ export default function ScoringPanel({ game }) {
           )}
 
           {!g.finished && (
+            <button
+              type="button"
+              aria-pressed={subOpen}
+              onClick={() => {
+                setAdjusting(null)
+                setSubOpen((v) => !v)
+              }}
+              className={`w-full rounded-md px-4 py-2.5 text-sm font-medium ${
+                subOpen ? 'bg-emerald-800 text-white' : 'border border-stone-300 bg-white text-stone-800 hover:bg-stone-50'
+              }`}
+            >
+              更換選手
+            </button>
+          )}
+
+          {!g.finished && (
             <SetControl state={state} battingTeam={battingTeam} atBoundary={atBoundary} onChange={g.changeSetSize} />
           )}
         </section>
 
         {/* 右：記錄 */}
         <section className="space-y-4">
-          {adjusting ? (
+          {subOpen ? (
+            <SubstitutionPanel
+              game={game}
+              lineups={g.lineups}
+              retired={g.retired}
+              state={state}
+              onSubmit={g.substitute}
+              onClose={() => setSubOpen(false)}
+            />
+          ) : adjusting ? (
             <PlaySheet
               key={`${state.inning}-${state.half}-${events.length}-${adjusting.result}`}
               result={adjusting.result}
@@ -364,6 +391,9 @@ export default function ScoringPanel({ game }) {
                   )}
                   {e.kind === 'set' && (
                     <span className="mr-2 rounded bg-stone-700 px-1.5 py-0.5 text-xs font-semibold text-white">設定</span>
+                  )}
+                  {e.kind === 'sub' && (
+                    <span className="mr-2 rounded bg-violet-600 px-1.5 py-0.5 text-xs font-semibold text-white">換人</span>
                   )}
                   {e.description}
                 </span>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { replay } from '../../utils/plateAppearance'
+import { buildLineupState } from '../../utils/lineup'
 import { buildBoxScore, buildFeed, isPA, teamTotals } from '../../utils/gameSummary'
 
 const POLL_MS = 8000 // 即時推送失效時的保底輪詢間隔
@@ -26,7 +27,7 @@ function toLineups(rows) {
  */
 export function useLiveGame(gameId) {
   const [game, setGame] = useState(null)
-  const [lineups, setLineups] = useState({ away: [], home: [] })
+  const [startLineups, setStartLineups] = useState({ away: [], home: [] }) // 原始先發
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -63,7 +64,7 @@ export function useLiveGame(gameId) {
       .eq('game_id', gameId)
       .order('batting_order')
     // 讀不到先發名單（例如沒有開放訪客讀取）不影響轉播，只是少了名單
-    if (!err) setLineups(toLineups(data))
+    if (!err) setStartLineups(toLineups(data))
   }, [gameId])
 
   const refresh = useCallback(() => Promise.all([loadGame(), loadEvents()]), [loadGame, loadEvents])
@@ -131,18 +132,20 @@ export function useLiveGame(gameId) {
       innings: game?.innings ?? 9,
       initialSetSize: game?.set_size ?? 1,
       lineupSize: {
-        away: lineups.away.length || GENERIC_LINEUP_SIZE,
-        home: lineups.home.length || GENERIC_LINEUP_SIZE,
+        away: startLineups.away.length || GENERIC_LINEUP_SIZE,
+        home: startLineups.home.length || GENERIC_LINEUP_SIZE,
       },
     }),
-    [game?.innings, game?.set_size, lineups]
+    [game?.innings, game?.set_size, startLineups]
   )
 
   const state = useMemo(() => replay(events, ctx), [events, ctx])
   const groups = useMemo(() => buildFeed(events), [events])
   const totals = useMemo(() => teamTotals(events), [events])
   const started = useMemo(() => events.some(isPA), [events]) // 只有備註不算開賽
-  const boxScore = useMemo(() => buildBoxScore(events, lineups), [events, lineups])
+  // 目前的打線（套用過換人）給局面顯示用；打擊成績表自己會從換人紀錄算出每位球員一列
+  const lineups = useMemo(() => buildLineupState(startLineups, events).lineups, [startLineups, events])
+  const boxScore = useMemo(() => buildBoxScore(events, startLineups), [events, startLineups])
 
   return { loading, error, game, lineups, events, started, state, groups, totals, boxScore, connected, updatedAt, refresh }
 }

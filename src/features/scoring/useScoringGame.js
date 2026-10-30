@@ -7,7 +7,8 @@ import {
   replay,
   validateDetails,
 } from '../../utils/plateAppearance'
-import { describePlateAppearance } from '../../utils/formatters'
+import { describePlateAppearance, describeSubstitutions } from '../../utils/formatters'
+import { buildLineupState, normalizeChanges, validateSubstitutions } from '../../utils/lineup'
 import { isPA } from '../../utils/gameSummary'
 import * as queue from './offlineQueue'
 
@@ -75,7 +76,7 @@ const gamePatch = (state, eventCount) => ({
  */
 export function useScoringGame(game) {
   const [events, setEvents] = useState(() => readJson(eventsKey(game.id), []))
-  const [lineups, setLineups] = useState(() => readJson(lineupsKey(game.id), { away: [], home: [] }))
+  const [startLineups, setStartLineups] = useState(() => readJson(lineupsKey(game.id), { away: [], home: [] })) // 原始先發
   const [loading, setLoading] = useState(() => readJson(lineupsKey(game.id), null) === null)
   const [error, setError] = useState('')
   const [manualFinished, setManualFinished] = useState(game.status === 'finished')
@@ -116,7 +117,7 @@ export function useScoringGame(game) {
       if (cancelled) return
       if (!lineupRes.error) {
         const next = toLineups(lineupRes.data)
-        setLineups(next)
+        setStartLineups(next)
         writeJson(lineupsKey(game.id), next)
       }
       if (!eventRes.error) {
@@ -139,16 +140,20 @@ export function useScoringGame(game) {
     writeJson(eventsKey(game.id), events)
   }, [events, game.id])
 
+  // 目前的打線 = 原始先發 + 換人紀錄
+  const lineupState = useMemo(() => buildLineupState(startLineups, events), [startLineups, events])
+  const lineups = lineupState.lineups
+
   const ctx = useMemo(
     () => ({
       innings: game.innings ?? 9,
       initialSetSize: game.set_size ?? 1, // 建立比賽時選的 1set / 2set；中途更改記在紀錄裡
       lineupSize: {
-        away: lineups.away.length || GENERIC_LINEUP_SIZE,
-        home: lineups.home.length || GENERIC_LINEUP_SIZE,
+        away: startLineups.away.length || GENERIC_LINEUP_SIZE,
+        home: startLineups.home.length || GENERIC_LINEUP_SIZE,
       },
     }),
-    [game.innings, game.set_size, lineups]
+    [game.innings, game.set_size, startLineups]
   )
 
   const state = useMemo(() => replay(events, ctx), [events, ctx])
@@ -318,10 +323,28 @@ export function useScoringGame(game) {
     [finished, state.setSize, makeRow, pushRow]
   )
 
+  /**
+   * 送出換人（代跑、代打、換人、守位交換），一次可以有好幾筆。
+   * 成功後目前的打線會更新；換人是時間軸上的一筆紀錄，可以用「復原上一筆」撤回。
+   */
+  const substitute = useCallback(
+    (rawChanges) => {
+      if (finished) return { ok: false, error: '比賽已結束' }
+      const changes = normalizeChanges(rawChanges)
+      const problem = validateSubstitutions(lineupState, { battingSide: side, bases: state.bases }, changes)
+      if (problem) return { ok: false, error: problem }
+      const description = describeSubstitutions(changes, lineups, { away: game.away_team, home: game.home_team })
+      pushRow(makeRow('sub', { result: 'SUB', subs: changes, description }))
+      return { ok: true }
+    },
+    [finished, lineupState, lineups, side, state.bases, game.away_team, game.home_team, makeRow, pushRow]
+  )
+
   return {
     loading,
     error,
     lineups,
+    retired: lineupState.retired,
     events,
     paCount,
     state,
@@ -333,6 +356,7 @@ export function useScoringGame(game) {
     undo,
     addNote,
     changeSetSize,
+    substitute,
     finishGame,
     reopenGame,
     sync: { online, pending, failed, retry: queue.flush, clearFailed: queue.clearFailed },

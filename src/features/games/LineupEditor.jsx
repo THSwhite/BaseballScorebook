@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import PlayerPicker from '../teams/PlayerPicker'
-import '../teams/Teams.css'
+import '../teams/teams.css'
 
 export const POSITIONS = [
   { value: 'P', label: '投手' },
@@ -14,7 +14,6 @@ export const POSITIONS = [
   { value: 'LF', label: '左外野手' },
   { value: 'CF', label: '中外野手' },
   { value: 'RF', label: '右外野手' },
-  { value: 'SF', label: '自由球員' },  
   { value: 'DH', label: '指定打擊' },
 ]
 
@@ -23,7 +22,7 @@ const DH = 'DH' // 指定打擊可以有多位，不檢查重複
 
 // PlayerPicker 用到的顏色變數（原本定義在 .tm-page，這裡補上讓它在先發視窗也能正常顯示）
 const pickerVars = {
-  '--tm-accent': '#065f46',
+  '--tm-accent': '#ba265c',
   '--tm-line': 'rgba(128, 128, 128, 0.3)',
   '--tm-soft': 'rgba(128, 128, 128, 0.1)',
 }

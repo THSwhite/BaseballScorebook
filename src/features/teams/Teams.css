@@ -1,6 +1,6 @@
 /* 球隊功能樣式：只用半透明邊框與繼承色，淺色／深色模式都能用 */
 .tm-page {
-  --tm-accent: #1d6fd8;
+  --tm-accent: #ba265c;
   --tm-line: rgba(128, 128, 128, 0.3);
   --tm-soft: rgba(128, 128, 128, 0.1);
   max-width: 960px;

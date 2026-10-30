@@ -24,7 +24,7 @@ const ERROR_KIND_NAMES = { catch: '接球失誤', throw: '傳球失誤', field: 
 const BATTER_OUT_RESULTS = new Set(['OUT', 'DP', 'SF', 'SH', 'GO', 'FO', 'LO', 'PO'])
 
 // 換人的類型與守位名稱
-export const SUB_LABEL = { pr: '代跑', ph: '代打', sub: '換人', swap: '守位交換' }
+export const SUB_LABEL = { pr: '代跑', ph: '代打', sub: '換人', swap: '守位交換', ins: '插入打者' }
 export const POSITION_NAMES = {
   P: '投手', C: '捕手', '1B': '一壘手', '2B': '二壘手', '3B': '三壘手', SS: '游擊手',
   LF: '左外野手', CF: '中外野手', RF: '右外野手', SF: '自由球員', DH: '指定打擊',
@@ -239,6 +239,12 @@ export function describeSubstitutions(changes, lineups, teamNames) {
       const other = lineups[c.side]?.[c.swapWith - 1]
       const pos = (p) => POSITION_NAMES[p?.position] ?? p?.position ?? '未定'
       return `${team} 守位交換：第 ${c.order} 棒 ${slotLabel(old, '原球員')}（${pos(old)}）與第 ${c.swapWith} 棒 ${slotLabel(other, '原球員')}（${pos(other)}）互換守位`
+    }
+    if (c.type === 'ins') {
+      const size = lineups[c.side]?.length ?? 0
+      const where = c.order > size ? `加在最後一棒（第 ${c.order} 棒）` : `插在第 ${c.order} 棒（原第 ${c.order} 棒起依序往後移）`
+      const pos = c.position ? `，守${POSITION_NAMES[c.position] ?? c.position}` : ''
+      return `${team} 臨時插入打者：${slotLabel(c, '新球員')} ${where}${pos}`
     }
     const moved = c.position && c.position !== old?.position ? `，改守${POSITION_NAMES[c.position] ?? c.position}` : ''
     return `${team} 第 ${c.order} 棒 ${slotLabel(old, '原球員')} 由 ${slotLabel(c, '新球員')} ${SUB_LABEL[c.type]}${moved}`

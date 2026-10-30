@@ -1,1 +1,44 @@
 @import "tailwindcss";
+
+/*
+ * 粉色系主題
+ * 專案裡的元件都是用 emerald（主色）與 stone（中性色）這兩組 Tailwind 色盤，
+ * 所以只要在這裡把兩組色盤換成粉色，整個網站就跟著換色，不用逐個元件修改。
+ * 之後想微調粉色的深淺，只要改下面的色碼。
+ */
+@theme {
+  /* 主色：按鈕、連結、選中狀態、比分板（800 = 主按鈕，900 = 滑過與比分板） */
+  --color-emerald-50: #fff0f5;
+  --color-emerald-100: #fee2ec;
+  --color-emerald-200: #fbc5d9;
+  --color-emerald-300: #f69cbd;
+  --color-emerald-400: #ee77a3;
+  --color-emerald-500: #e55d8f;
+  --color-emerald-600: #dc477d;
+  --color-emerald-700: #d3316c;
+  --color-emerald-800: #ba265c;
+  --color-emerald-900: #9a1d4b;
+  --color-emerald-950: #520f27;
+
+  /* 中性色：頁面底色、卡片、邊框、文字，全部帶一點粉色調 */
+  --color-stone-50: #fff7f9;
+  --color-stone-100: #fdeef2;
+  --color-stone-200: #efdce3;
+  --color-stone-300: #dfc8d0;
+  --color-stone-400: #b096a0;
+  --color-stone-500: #80646e;
+  --color-stone-600: #5d474f;
+  --color-stone-700: #4a353d;
+  --color-stone-800: #2e1f24;
+  --color-stone-900: #1f1418;
+  --color-stone-950: #0d080a;
+}
+
+html {
+  color-scheme: light;
+}
+
+::selection {
+  background: #fbc5d9;
+  color: #1f1418;
+}

@@ -31,9 +31,13 @@ function TeamTable({ name, rows }) {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.order} className="border-t border-stone-100">
+                <tr key={r.key} className="border-t border-stone-100">
                   <td className="px-3 py-2 text-left">
-                    <span className="mr-2 text-stone-400">{r.order}</span>
+                    {r.role ? (
+                      <span className="mr-2 ml-4 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">{r.role}</span>
+                    ) : (
+                      <span className="mr-2 text-stone-400">{r.order}</span>
+                    )}
                     <span className="font-medium text-stone-900">
                       {r.name || (hasNumber(r.number) ? `#${r.number}` : '—')}
                     </span>
