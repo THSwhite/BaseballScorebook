@@ -133,6 +133,7 @@ export function initialState(setSize = 1) {
     blockSize: setSize, // 這一輪實際連打幾局（一輪開始時決定；最後一局不夠時會縮短）
     setNo: 1, // 這一輪的第幾局（1 ~ blockSize）
     halfPlays: 0, // 目前這個半局已經記錄了幾個打席
+    inserted: { away: 0, home: 0 }, // 臨時插入的打者人數（打線比先發名單多幾人，輪棒次要算進去）
   }
 }
 
@@ -378,7 +379,7 @@ export function evaluatePlateAppearance(state, pa, ctx = {}) {
   while (arr.length < state.inning) arr.push(0)
   arr[state.inning - 1] += runs
 
-  const size = Math.max(1, ctx.lineupSize?.[side] ?? RULES.PLAYERS_ON_FIELD)
+  const size = Math.max(1, (ctx.lineupSize?.[side] ?? RULES.PLAYERS_ON_FIELD) + (state.inserted?.[side] ?? 0))
   next.nextBatter[side] = (batter.order % size) + 1
 
   return { ok: true, record, nextState: settle(next, ctx), ignoredRuns: rawRuns - runs }
@@ -407,17 +408,30 @@ export function rowToPa(row) {
  * 之後的得分就會算在新球員身上。其他換人只影響打線，不影響這裡。
  */
 export function applySubsToState(state, subs = []) {
-  const side = state.half === 'top' ? 'away' : 'home'
+  const battingSide = state.half === 'top' ? 'away' : 'home'
   let bases = state.bases
+  let nextBatter = state.nextBatter
+  let inserted = state.inserted
   for (const c of subs) {
-    if (c.type === 'swap' || c.side !== side) continue
+    if (c.type === 'ins') {
+      // 插入打者：這一棒以後的人往後移一棒（壘上跑者的棒次跟著變），打線多一人；
+      // 如果插在「下一位要打的人」前面，下一棒的號碼也要往後一格，輪到的還是同一個人
+      if (c.side === battingSide) {
+        bases = bases.map((b) => (b && b.order >= c.order ? { ...b, order: b.order + 1 } : b))
+      }
+      if (nextBatter[c.side] > c.order) nextBatter = { ...nextBatter, [c.side]: nextBatter[c.side] + 1 }
+      inserted = { ...inserted, [c.side]: (inserted?.[c.side] ?? 0) + 1 }
+      continue
+    }
+    if (c.type === 'swap' || c.side !== battingSide) continue
     bases = bases.map((b) =>
       b && b.order === c.order
         ? { order: c.order, name: c.name ?? '', number: c.number ?? null, playerId: c.playerId ?? null }
         : b
     )
   }
-  return bases === state.bases ? state : { ...state, bases }
+  if (bases === state.bases && nextBatter === state.nextBatter && inserted === state.inserted) return state
+  return { ...state, bases, nextBatter, inserted }
 }
 
 /**

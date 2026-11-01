@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import BaseDiamond from './BaseDiamond'
 import ResultButtons from './ResultButtons'
@@ -71,8 +71,18 @@ function LineScore({ game, state, events }) {
 }
 
 /* ---------- 同步狀態 ---------- */
+// 常見的資料庫錯誤代碼，翻成看得懂的提示
+const SYNC_HINT = {
+  '42501': '沒有寫入權限：請確認 Supabase 的 plate_appearances 有允許記錄員 update 與 delete 的 RLS 規則',
+  '23505': '序號或資料重複：請確認 plate_appearances 的 (game_id, seq) 唯一限制',
+  '23503': '關聯的資料不存在（例如球員或比賽已被刪除）',
+  '23502': '有必填欄位沒有值',
+  PGRST204: '資料表缺少某個欄位（schema 與程式不一致）',
+}
+
 function SyncStatus({ sync }) {
   const { online, pending, failed } = sync
+  const last = failed[failed.length - 1]
   let text = '已同步'
   let style = 'bg-emerald-100 text-emerald-800'
   if (!online) {
@@ -88,10 +98,18 @@ function SyncStatus({ sync }) {
         {text}
       </span>
       {failed.length > 0 && (
-        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-          有 {failed.length} 筆資料同步失敗：{failed[failed.length - 1].message}
-          <button type="button" onClick={sync.clearFailed} className="ml-2 underline">知道了</button>
-        </p>
+        <div role="alert" className="space-y-1 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+          <p>
+            有 {failed.length} 筆資料同步失敗
+            {last.op?.type === 'history' ? '（修改歷史）' : ''}：{last.message}
+            {last.code ? `（${last.code}）` : ''}
+          </p>
+          {SYNC_HINT[last.code] && <p className="text-xs">{SYNC_HINT[last.code]}</p>}
+          <p className="flex gap-3">
+            <button type="button" onClick={sync.retryFailed} className="font-medium underline">重試</button>
+            <button type="button" onClick={sync.clearFailed} className="underline">知道了</button>
+          </p>
+        </div>
       )}
     </div>
   )
@@ -182,6 +200,7 @@ export default function ScoringPanel({ game }) {
   const [adjusting, setAdjusting] = useState(null) // { result, movements, batterTo }
   const [subOpen, setSubOpen] = useState(false) // 更換選手面板
   const [historyOpen, setHistoryOpen] = useState(false) // 修改歷史面板
+  const historyDirty = useRef(false) // 修改歷史裡有尚未送出的草稿
   const [alwaysConfirm, setAlwaysConfirm] = useState(false)
   const [message, setMessage] = useState('')
 
@@ -216,6 +235,12 @@ export default function ScoringPanel({ game }) {
 
   function handleFinish() {
     if (window.confirm('確定要結束這場比賽嗎？比賽狀態會變成「已結束」。')) g.finishGame()
+  }
+
+  // 離開修改歷史前，如果有尚未送出的草稿，先問一下
+  function confirmLeaveHistory() {
+    if (!historyOpen || !historyDirty.current) return true
+    return window.confirm('修改歷史裡有尚未送出的修改，確定要放棄嗎？')
   }
 
   const winnerText = state.winner
@@ -285,6 +310,7 @@ export default function ScoringPanel({ game }) {
               type="button"
               aria-pressed={subOpen}
               onClick={() => {
+                if (!confirmLeaveHistory()) return
                 setAdjusting(null)
                 setHistoryOpen(false)
                 setSubOpen((v) => !v)
@@ -302,6 +328,7 @@ export default function ScoringPanel({ game }) {
             type="button"
             aria-pressed={historyOpen}
             onClick={() => {
+              if (!confirmLeaveHistory()) return
               setAdjusting(null)
               setSubOpen(false)
               setHistoryOpen((v) => !v)
@@ -313,7 +340,7 @@ export default function ScoringPanel({ game }) {
             修改歷史
           </button>
 
-          {!g.finished && (
+          {!g.finished && !historyOpen && (
             <SetControl state={state} battingTeam={battingTeam} atBoundary={atBoundary} onChange={g.changeSetSize} />
           )}
         </section>
@@ -327,7 +354,11 @@ export default function ScoringPanel({ game }) {
               state={state}
               startLineups={g.startLineups}
               ctx={g.ctx}
-              onApply={g.applyHistory}
+              dirtyRef={historyDirty}
+              onApply={(rows) => {
+                g.applyHistory(rows)
+                setHistoryOpen(false)
+              }}
               onClose={() => setHistoryOpen(false)}
             />
           ) : subOpen ? (
@@ -370,7 +401,7 @@ export default function ScoringPanel({ game }) {
             <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{message}</p>
           )}
 
-          <NoteBox onSend={g.addNote} />
+          {!historyOpen && <NoteBox onSend={g.addNote} />}
         </section>
       </div>
 
@@ -382,7 +413,7 @@ export default function ScoringPanel({ game }) {
             setAdjusting(null)
             g.undo()
           }}
-          disabled={!lastEvent}
+          disabled={!lastEvent || historyOpen}
           className="rounded-md border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-800 hover:bg-stone-50 disabled:opacity-40"
         >
           復原上一筆

@@ -5,7 +5,7 @@
  * 核心概念：
  *   每一筆紀錄存的「局數、出局數、打者、跑者、得分、說明文字」都是當時算出來的結果。
  *   改了前面的某一筆，後面每一筆的前提都變了（例如插入一個打席，後面所有人的棒次都往後挪）。
- *   所以做法是：只保留每一筆「使用者的決定」（結果、擊球資料、跑者去向），
+ *   所以做法是：只保留每一筆「使用者的決定」（結果、擊球資料、跑者去向、換人內容），
  *   其餘全部依序重新推算，再回寫。
  *
  *   例：1 → 2 → 3，在 1 與 2 中間插入 4  =>  1 → 4 → 2 → 3，2、3 的打者與局面自動往後調整。
@@ -20,7 +20,7 @@ import {
   initialState,
   rowToPa,
 } from './plateAppearance'
-import { buildLineupState } from './lineup'
+import { buildLineupState, validateSubstitutions } from './lineup'
 import { describePlateAppearance, describeSubstitutions } from './formatters'
 
 const kindOf = (row) => row.kind ?? 'pa'
@@ -32,10 +32,11 @@ const kindOf = (row) => row.kind ?? 'pa'
  * @param ctx          { innings, initialSetSize, lineupSize }
  * @param teamNames    { away, home }（換人說明文字用）
  * @returns {{
- *   rows: object[],      重新推算後的紀錄
- *   state: object,       最後的比賽狀態
- *   adjusted: string[],  跑者去向在新局面下不成立、改用預設推進的紀錄 id
- *   dropped: object[],   在新局面下完全無法成立、被移除的紀錄（原本的樣子）
+ *   rows: object[],       重新推算後的紀錄
+ *   state: object,        最後的比賽狀態
+ *   adjusted: string[],   跑者去向在新局面下不成立、改用預設推進的紀錄 id
+ *   dropped: {row, reason}[],   在新局面下完全無法成立、被移除的打席
+ *   warnings: {row, reason}[],  換人在新局面下有疑問（仍會保留，請記錄員確認）
  * }}
  */
 export function rebuildTimeline(rows, startLineups, ctx, teamNames = { away: '客隊', home: '主隊' }) {
@@ -44,9 +45,11 @@ export function rebuildTimeline(rows, startLineups, ctx, teamNames = { away: '�
   const out = []
   const adjusted = []
   const dropped = []
+  const warnings = []
 
   for (const row of rows) {
     const kind = kindOf(row)
+    const side = state.half === 'top' ? 'away' : 'home'
     const at = { inning: state.inning, half: state.half, set_no: state.setNo, outs_before: state.outs }
 
     if (kind === 'note') {
@@ -61,11 +64,16 @@ export function rebuildTimeline(rows, startLineups, ctx, teamNames = { away: '�
     }
 
     if (kind === 'sub') {
+      // 換人：照目前的局面再檢查一次。有疑問只提醒、不移除，免得誤刪記錄員真的做過的換人
+      const lineupState = buildLineupState(startLineups, out)
+      const problem = validateSubstitutions(lineupState, { battingSide: side, bases: state.bases }, row.subs ?? [])
+      if (problem) warnings.push({ row, reason: problem })
+
       out.push({
         ...row,
         ...at,
         seq: out.length + 1,
-        description: describeSubstitutions(row.subs ?? [], lineups, teamNames),
+        description: describeSubstitutions(row.subs ?? [], lineupState.lineups, teamNames),
       })
       state = applySubsToState(state, row.subs)
       lineups = buildLineupState(startLineups, out).lineups
@@ -73,7 +81,6 @@ export function rebuildTimeline(rows, startLineups, ctx, teamNames = { away: '�
     }
 
     // ---- 打席 ----
-    const side = state.half === 'top' ? 'away' : 'home'
     const order = state.nextBatter[side]
     const batter = lineups[side][order - 1] ?? { order, name: '', number: null, playerId: null }
     const stored = rowToPa(row)
@@ -88,7 +95,7 @@ export function rebuildTimeline(rows, startLineups, ctx, teamNames = { away: '�
       if (res.ok) adjusted.push(row.id)
     }
     if (!res.ok) {
-      dropped.push(row) // 例如沒人上壘卻有「野手選擇」，或比賽已經結束
+      dropped.push({ row, reason: res.error }) // 例如沒人上壘卻有「野手選擇」，或比賽已經結束
       continue
     }
 
@@ -128,7 +135,7 @@ export function rebuildTimeline(rows, startLineups, ctx, teamNames = { away: '�
     state = res.nextState
   }
 
-  return { rows: out, state, adjusted, dropped }
+  return { rows: out, state, adjusted, dropped, warnings }
 }
 
 /* ---------- 編輯動作（都回傳新的陣列，不改動原本的） ---------- */
@@ -154,6 +161,63 @@ export function newPaRow(id, gameId, result, details) {
   return { id, game_id: gameId, seq: 0, kind: 'pa', ...paPatch(result, details) }
 }
 
+/**
+ * 全新的換人紀錄（插入用）；changes 是 normalizeChanges() 的結果。
+ * 欄位與記錄頁的 makeRow('sub') 一致；局數、說明文字會在 rebuildTimeline 裡算出來
+ */
+export function newSubRow(id, gameId, changes) {
+  return {
+    id,
+    game_id: gameId,
+    seq: 0,
+    kind: 'sub',
+    inning: 1,
+    half: 'top',
+    set_no: 1,
+    batting_order: 0,
+    batter_id: null,
+    batter_name: '',
+    batter_number: null,
+    outs_before: 0,
+    outs_added: 0,
+    runs: 0,
+    rbi: 0,
+    runners: [],
+    batter_to: 0,
+    hit_type: null,
+    hit_direction: null,
+    with_error: false,
+    with_fc: false,
+    set_size: null,
+    result: 'SUB',
+    subs: changes,
+    description: '',
+  }
+}
+
+/**
+ * 「插入打者」會讓這一棒以後的人往後移一棒（或刪掉時往前移）。
+ * 在它之後的換人紀錄是用舊的棒次寫的，所以要一起調整：棒次在這一棒（含）以後的 +1。
+ * delta = +1：插入；delta = -1：撤銷（只調整比這一棒大的，剛好是 +1 的反向）
+ * @param fromIndex 從這個位置開始（含）往後的紀錄才調整
+ */
+export function shiftLaterSubs(rows, fromIndex, side, at, delta) {
+  const move = (n) => {
+    if (!Number.isInteger(n)) return n
+    return delta > 0 ? (n >= at ? n + delta : n) : n > at ? n + delta : n
+  }
+  return rows.map((r, i) => {
+    if (i < fromIndex || kindOf(r) !== 'sub') return r
+    const subs = (r.subs ?? []).map((c) => {
+      if (c.side !== side) return c
+      const next = { ...c, order: move(Number(c.order)) }
+      if (c.type === 'swap') next.swapWith = move(Number(c.swapWith))
+      return next
+    })
+    return { ...r, subs }
+  })
+}
+
 export const updateRow = (rows, id, patch) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r))
 
 /** 插在 beforeId 這一筆之前；beforeId 為 null 就加到最後 */
@@ -167,16 +231,23 @@ export function insertBefore(rows, beforeId, row) {
 export const removeRow = (rows, id) => rows.filter((r) => r.id !== id)
 
 /**
- * 某一筆「發生之前」的局面與打者（修改、插入時，確認畫面要用）
+ * 這串紀錄「全部發生之後」的局面、下一位打者與打線（修改、插入時，確認畫面要用）
+ * 傳入的 rows 通常是「某一筆之前」的那一段
+ */
+export function stateAt(rows, startLineups, ctx, teamNames) {
+  const { rows: rebuilt, state } = rebuildTimeline(rows, startLineups, ctx, teamNames)
+  const lineupState = buildLineupState(startLineups, rebuilt)
+  const side = state.half === 'top' ? 'away' : 'home'
+  const order = state.nextBatter[side]
+  const batter = lineupState.lineups[side][order - 1] ?? { order, name: '', number: null, playerId: null }
+  return { state, batter, lineupState }
+}
+
+/**
+ * 某一筆「發生之前」的局面與打者
  * @param atId 這一筆的 id；null 代表最後（全部紀錄之後）
  */
 export function stateBefore(rows, atId, startLineups, ctx, teamNames) {
   const index = atId ? rows.findIndex((r) => r.id === atId) : -1
-  const upTo = index < 0 ? rows : rows.slice(0, index)
-  const { state } = rebuildTimeline(upTo, startLineups, ctx, teamNames)
-  const side = state.half === 'top' ? 'away' : 'home'
-  const order = state.nextBatter[side]
-  const lineups = buildLineupState(startLineups, upTo).lineups
-  const batter = lineups[side][order - 1] ?? { order, name: '', number: null, playerId: null }
-  return { state, batter }
+  return stateAt(index < 0 ? rows : rows.slice(0, index), startLineups, ctx, teamNames)
 }

@@ -50,16 +50,18 @@ function toLineups(rows) {
   return out
 }
 
-// 伺服器資料 + 還沒送出的新增與修改 − 還沒送出的刪除
+// 伺服器資料 + 依序套用還沒送出的新增、修改、刪除（含修改歷史）
 function mergeWithQueue(serverRows, gameId) {
-  const ops = queue.getQueue()
-  const deleted = new Set(ops.filter((o) => o.type === 'delete').map((o) => o.id))
-  const pendingRows = ops
-    .filter((o) => (o.type === 'insert' || o.type === 'upsert') && o.row.game_id === gameId)
-    .map((o) => o.row)
-  const byId = new Map()
-  for (const row of [...serverRows, ...pendingRows]) {
-    if (!deleted.has(row.id)) byId.set(row.id, row)
+  const byId = new Map(serverRows.map((row) => [row.id, row]))
+  for (const o of queue.getQueue()) {
+    if (o.type === 'delete') {
+      byId.delete(o.id)
+    } else if ((o.type === 'insert' || o.type === 'upsert') && o.row.game_id === gameId) {
+      byId.set(o.row.id, o.row)
+    } else if (o.type === 'history' && o.gameId === gameId) {
+      for (const id of o.deleteIds ?? []) byId.delete(id)
+      for (const row of o.rows ?? []) byId.set(row.id, row)
+    }
   }
   return [...byId.values()].sort((a, b) => a.seq - b.seq)
 }
@@ -344,7 +346,8 @@ export function useScoringGame(game) {
 
   /**
    * 修改歷史：把重新推算後的整串紀錄寫回（見 utils/history.js 的 rebuildTimeline）。
-   * 只送出有變動的列：新增的用 insert、改過的用 upsert、不見的用 delete；seq 已經重新編號。
+   * 只送出有變動的列，而且合成「一個」同步動作（刪除 + 新增 + 修改），
+   * 不再一筆一筆各自排隊，避免中途失敗留下只改了一半的紀錄。
    */
   const applyHistory = useCallback(
     (newRows) => {
@@ -352,15 +355,17 @@ export function useScoringGame(game) {
       const oldById = new Map(events.map((e) => [e.id, e]))
       const keep = new Set(newRows.map((r) => r.id))
 
+      // 還沒送出的新增直接從佇列拿掉；已經送出的才需要真的刪除
+      const deleteIds = []
       for (const e of events) {
-        if (!keep.has(e.id) && !queue.removeInsert(e.id)) {
-          queue.enqueue({ type: 'delete', table: TABLE, id: e.id })
-        }
+        if (!keep.has(e.id) && !queue.removeInsert(e.id)) deleteIds.push(e.id)
       }
-      for (const row of newRows) {
+      const rows = newRows.filter((row) => {
         const old = oldById.get(row.id)
-        if (!old) queue.enqueue({ type: 'insert', table: TABLE, row })
-        else if (JSON.stringify(old) !== JSON.stringify(row)) queue.enqueue({ type: 'upsert', table: TABLE, row })
+        return !old || JSON.stringify(old) !== JSON.stringify(row)
+      })
+      if (deleteIds.length > 0 || rows.length > 0) {
+        queue.enqueue({ type: 'history', table: TABLE, gameId: game.id, deleteIds, rows })
       }
 
       setEvents(newRows)
@@ -396,6 +401,13 @@ export function useScoringGame(game) {
     applyHistory,
     finishGame,
     reopenGame,
-    sync: { online, pending, failed, retry: queue.flush, clearFailed: queue.clearFailed },
+    sync: {
+      online,
+      pending,
+      failed,
+      retry: queue.flush,
+      retryFailed: queue.retryFailed,
+      clearFailed: queue.clearFailed,
+    },
   }
 }
