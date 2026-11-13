@@ -6,27 +6,20 @@ import PlaySheet from './PlaySheet'
 import SubstitutionPanel from './SubstitutionPanel'
 import HistoryPanel from './HistoryPanel'
 import { useScoringGame } from './useScoringGame'
-import {
-  HAS_BATTED_BALL,
-  HIT_RESULTS,
-  defaultHeight,
-  defaultOutcome,
-} from '../../utils/plateAppearance'
-import { lineScoreCell } from '../../utils/gameSummary'
+import { HAS_BATTED_BALL, defaultHeight, defaultOutcome } from '../../utils/plateAppearance'
+import { hasNumber } from '../../utils/formatters'
+import { lineScoreCell, teamTotals } from '../../utils/gameSummary'
 
 // 沒有擊球的結果（三振、保送、觸身球）：就算有跑者也直接記錄，跑者去向固定。
 // 有擊球的結果一律先開確認畫面（要選方向、高度，跑者去向也在同一個畫面）
 const SKIP_CONFIRM = new Set(['BB', 'HBP', 'K'])
-
-const hasNumber = (n) => n !== null && n !== undefined && n !== ''
 
 /* ---------- 局數比分表 ---------- */
 function LineScore({ game, state, events }) {
   const cols = Math.max(game.innings ?? 9, state.inning)
   const innings = Array.from({ length: cols }, (_, i) => i + 1)
 
-  const hits = (side) =>
-    events.filter((e) => HIT_RESULTS.has(e.result) && e.half === (side === 'away' ? 'top' : 'bottom')).length
+  const totals = teamTotals(events)
 
   const batting = state.half === 'top' ? 'away' : 'home'
 
@@ -61,7 +54,7 @@ function LineScore({ game, state, events }) {
                 <td key={i} className="px-2 py-1.5">{lineScoreCell(state, side, i)}</td>
               ))}
               <td className="px-2 py-1.5 font-bold text-stone-900">{state.score[side]}</td>
-              <td className="px-2 py-1.5 text-stone-700">{hits(side)}</td>
+              <td className="px-2 py-1.5 text-stone-700">{totals[side].h}</td>
             </tr>
           ))}
         </tbody>

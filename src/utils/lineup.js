@@ -10,7 +10,9 @@
  *   ins  插入打者：新球員插進打線的某一棒，原本那一棒以後的人依序往後移（打線多一人）
  * 被換下場的球員不能再回場。
  */
-import { POSITION_NAMES, SUB_LABEL } from './formatters'
+import { DH, POSITION_NAMES, RULES } from './baseballRules'
+import { SUB_LABEL, hasNumber } from './formatters'
+import { kindOf } from './plateAppearance'
 
 export const SUB_TYPE_OPTIONS = [
   { value: 'pr', label: SUB_LABEL.pr },
@@ -19,9 +21,36 @@ export const SUB_TYPE_OPTIONS = [
   { value: 'swap', label: SUB_LABEL.swap },
 ]
 
-const DH = 'DH' // 指定打擊可以有多位，不檢查重複
-const hasNumber = (n) => n !== null && n !== undefined && n !== ''
 const hasName = (p) => !!(p.name ?? '').trim()
+
+/** 資料庫 lineups 的列 → { away: [...], home: [...] } 的先發名單 */
+export function lineupsFromRows(rows) {
+  const out = { away: [], home: [] }
+  for (const r of rows ?? []) {
+    out[r.team_side]?.push({
+      order: r.batting_order,
+      name: r.player_name ?? '',
+      number: r.jersey_number ?? null,
+      playerId: r.player_id ?? null,
+      position: r.position,
+    })
+  }
+  return out
+}
+
+/** 打線上某一棒的球員；名單沒有這一棒（例如沒設先發）就回傳只有打序的空位 */
+export const batterAt = (lineups, side, order) =>
+  lineups[side]?.[order - 1] ?? { order, name: '', number: null, playerId: null }
+
+/** 重播比賽要用的設定：局數、一開始的 1set／2set、兩隊打線人數 */
+export const gameContext = (game, startLineups) => ({
+  innings: game?.innings ?? RULES.INNINGS,
+  initialSetSize: game?.set_size ?? 1, // 建立比賽時選的 1set / 2set；中途更改記在紀錄裡
+  lineupSize: {
+    away: startLineups.away.length || RULES.PLAYERS_ON_FIELD,
+    home: startLineups.home.length || RULES.PLAYERS_ON_FIELD,
+  },
+})
 
 export const isBlankPlayer = (p) => !p.playerId && !hasNumber(p.number) && !hasName(p)
 
@@ -95,7 +124,7 @@ export function buildLineupState(start, rows) {
   let lineups = { away: [...(start.away ?? [])], home: [...(start.home ?? [])] }
   const retired = { away: [], home: [] }
   for (const row of rows) {
-    if ((row.kind ?? 'pa') !== 'sub') continue
+    if (kindOf(row) !== 'sub') continue
     for (const c of row.subs ?? []) lineups = applyChange(lineups, retired, c)
   }
   return { lineups, retired }

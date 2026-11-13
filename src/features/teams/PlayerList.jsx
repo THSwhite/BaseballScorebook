@@ -6,7 +6,10 @@ import {
   deletePlayer,
   errorMessage,
 } from './teamsApi'
-import { POSITIONS, BATS_LABEL, THROWS_LABEL } from './Constants'
+import { POSITION_NAMES, POSITION_OPTIONS } from '../../utils/baseballRules'
+
+const BATS_LABEL = { R: '右打', L: '左打', S: '左右開弓' }
+const THROWS_LABEL = { R: '右投', L: '左投' }
 
 /* ---------- 新增／編輯用的小表單 ---------- */
 function PlayerForm({ initial, submitLabel, onSubmit, onCancel }) {
@@ -76,9 +79,9 @@ function PlayerForm({ initial, submitLabel, onSubmit, onCancel }) {
           <span>主要守位</span>
           <select value={position} onChange={(e) => setPosition(e.target.value)}>
             <option value="">未指定</option>
-            {POSITIONS.map((p) => (
-              <option key={p} value={p}>
-                {p}
+            {POSITION_OPTIONS.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
               </option>
             ))}
           </select>
@@ -226,7 +229,7 @@ export default function PlayerList({ team, onChanged }) {
                   <tr key={p.id}>
                     <td className="tm-num">{p.jersey_number ?? '–'}</td>
                     <td>{p.name}</td>
-                    <td>{p.primary_position ?? '–'}</td>
+                    <td>{POSITION_NAMES[p.primary_position] ?? p.primary_position ?? '–'}</td>
                     <td>
                       {[THROWS_LABEL[p.throws], BATS_LABEL[p.bats]].filter(Boolean).join(' / ') ||
                         '–'}

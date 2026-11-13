@@ -1,24 +1,11 @@
-/**LineupEditor.jsx*/
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import PlayerPicker from '../teams/PlayerPicker'
+import { DH, POSITION_NAMES, POSITION_OPTIONS } from '../../utils/baseballRules'
 import '../teams/teams.css'
 
-export const POSITIONS = [
-  { value: 'P', label: '投手' },
-  { value: 'C', label: '捕手' },
-  { value: '1B', label: '一壘手' },
-  { value: '2B', label: '二壘手' },
-  { value: '3B', label: '三壘手' },
-  { value: 'SS', label: '游擊手' },
-  { value: 'LF', label: '左外野手' },
-  { value: 'CF', label: '中外野手' },
-  { value: 'RF', label: '右外野手' },
-  { value: 'DH', label: '指定打擊' },
-]
 
 const MIN_SLOTS = 9 // 預設列數；棒次沒有上限，可無限增加
-const DH = 'DH' // 指定打擊可以有多位，不檢查重複
 
 // PlayerPicker 用到的顏色變數（原本定義在 .tm-page，這裡補上讓它在先發視窗也能正常顯示）
 const pickerVars = {
@@ -149,7 +136,7 @@ export default function LineupEditor({ game, side, onSaved }) {
     // 指定打擊（DH）可以有多位，其他守位不可重複
     const used = slots.map((s) => s.position).filter((p) => p !== DH)
     const dup = used.find((p, i) => used.indexOf(p) !== i)
-    if (dup) return `守備位置「${POSITIONS.find((p) => p.value === dup).label}」重複了。`
+    if (dup) return `守備位置「${POSITION_NAMES[dup] ?? dup}」重複了。`
     const numbers = slots.map((s) => String(s.jersey_number).trim()).filter(Boolean)
     const dupNumber = numbers.find((n, i) => numbers.indexOf(n) !== i)
     if (dupNumber) return `背號 ${dupNumber} 重複了。`
@@ -257,7 +244,7 @@ export default function LineupEditor({ game, side, onSaved }) {
               className={`${fieldClass} w-28`}
             >
               <option value="">守備位置</option>
-              {POSITIONS.map((p) => (
+              {POSITION_OPTIONS.map((p) => (
                 <option key={p.value} value={p.value}>{p.label}</option>
               ))}
             </select>

@@ -3,7 +3,7 @@ import ResultButtons from './ResultButtons'
 import PlaySheet from './PlaySheet'
 import SubstitutionPanel from './SubstitutionPanel'
 import { newId } from './offlineQueue'
-import { RESULT_MAP, defaultHeight, defaultOutcome, evaluatePlateAppearance } from '../../utils/plateAppearance'
+import { RESULT_MAP, defaultHeight, defaultOutcome, evaluatePlateAppearance, kindOf } from '../../utils/plateAppearance'
 import { parseFielding } from '../../utils/formatters'
 import { normalizeChanges, validateSubstitutions } from '../../utils/lineup'
 import {
@@ -12,7 +12,7 @@ import {
   newSubRow,
   paPatch,
   rebuildTimeline,
-  shiftLaterSubs,
+  shiftForInsertions,
   stateAt,
   updateRow,
 } from '../../utils/history'
@@ -27,17 +27,6 @@ const smallBtn =
   'rounded-md border border-stone-300 bg-white px-2.5 py-1 text-xs font-medium text-stone-700 hover:bg-stone-50'
 
 const halfText = (half) => (half === 'top' ? '上' : '下')
-const kindOf = (r) => r.kind ?? 'pa'
-
-// 換人紀錄裡有「插入打者」時，後面的換人棒次要一起調整（見 history.js 的 shiftLaterSubs）
-function shiftIns(rows, fromIndex, row, delta) {
-  let next = rows
-  for (const c of row.subs ?? []) {
-    if (c.type === 'ins') next = shiftLaterSubs(next, fromIndex, c.side, Number(c.order), delta)
-  }
-  return next
-}
-
 /* ---------- 修改或插入一個打席：先選結果，再用確認畫面填細節 ---------- */
 function PaEditor({ mode, row, before, ctx, title, onSubmit, onCancel }) {
   const [result, setResult] = useState(mode === 'edit' ? row.result : '')
@@ -180,7 +169,7 @@ export default function HistoryPanel({ game, events, state, startLineups, ctx, o
     setDraft((rows) => {
       const next = insertBefore(rows, beforeId, row)
       const index = next.findIndex((r) => r.id === row.id)
-      return kindOf(row) === 'sub' ? shiftIns(next, index + 1, row, 1) : next
+      return kindOf(row) === 'sub' ? shiftForInsertions(next, index + 1, row, 1) : next
     })
     setMarks((m) => ({ ...m, [row.id]: 'added' }))
   }
@@ -214,9 +203,9 @@ export default function HistoryPanel({ game, events, state, startLineups, ctx, o
       if (index < 0) return rows
       if (isAdded) {
         const next = rows.filter((r) => r.id !== row.id)
-        return kindOf(row) === 'sub' ? shiftIns(next, index, row, -1) : next
+        return kindOf(row) === 'sub' ? shiftForInsertions(next, index, row, -1) : next
       }
-      return kindOf(row) === 'sub' ? shiftIns(rows, index + 1, row, -1) : rows
+      return kindOf(row) === 'sub' ? shiftForInsertions(rows, index + 1, row, -1) : rows
     })
     if (isAdded) {
       setMarks((m) => {
@@ -231,7 +220,7 @@ export default function HistoryPanel({ game, events, state, startLineups, ctx, o
   function restoreRow(row) {
     setDraft((rows) => {
       const index = rows.findIndex((r) => r.id === row.id)
-      return kindOf(row) === 'sub' ? shiftIns(rows, index + 1, row, 1) : rows
+      return kindOf(row) === 'sub' ? shiftForInsertions(rows, index + 1, row, 1) : rows
     })
     setRemoved((m) => {
       const { [row.id]: _gone, ...rest } = m

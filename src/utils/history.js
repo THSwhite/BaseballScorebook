@@ -18,12 +18,11 @@ import {
   evaluatePlateAppearance,
   fieldingString,
   initialState,
+  kindOf,
   rowToPa,
 } from './plateAppearance'
-import { buildLineupState, validateSubstitutions } from './lineup'
+import { batterAt, buildLineupState, validateSubstitutions } from './lineup'
 import { describePlateAppearance, describeSubstitutions } from './formatters'
-
-const kindOf = (row) => row.kind ?? 'pa'
 
 /**
  * 把整串紀錄依序重新推算
@@ -81,8 +80,7 @@ export function rebuildTimeline(rows, startLineups, ctx, teamNames = { away: '�
     }
 
     // ---- 打席 ----
-    const order = state.nextBatter[side]
-    const batter = lineups[side][order - 1] ?? { order, name: '', number: null, playerId: null }
+    const batter = batterAt(lineups, side, state.nextBatter[side])
     const stored = rowToPa(row)
     const attempt = (movements, batterTo, extras) =>
       evaluatePlateAppearance(state, { result: row.result, batter, movements, batterTo, ...extras }, ctx)
@@ -162,15 +160,13 @@ export function newPaRow(id, gameId, result, details) {
 }
 
 /**
- * 全新的換人紀錄（插入用）；changes 是 normalizeChanges() 的結果。
- * 欄位與記錄頁的 makeRow('sub') 一致；局數、說明文字會在 rebuildTimeline 裡算出來
+ * 一筆「不是打席」的空白紀錄（備註、set 更改、換人）：打席才有的欄位都填預設值。
+ * 記錄頁新增紀錄、修改歷史插入換人都用這個，確保欄位一致
  */
-export function newSubRow(id, gameId, changes) {
+export function emptyRow(fields) {
   return {
-    id,
-    game_id: gameId,
     seq: 0,
-    kind: 'sub',
+    kind: 'pa',
     inning: 1,
     half: 'top',
     set_no: 1,
@@ -189,11 +185,13 @@ export function newSubRow(id, gameId, changes) {
     with_error: false,
     with_fc: false,
     set_size: null,
-    result: 'SUB',
-    subs: changes,
-    description: '',
+    ...fields,
   }
 }
+
+/** 全新的換人紀錄（插入用）；changes 是 normalizeChanges() 的結果。局數、說明文字會在 rebuildTimeline 裡算出來 */
+export const newSubRow = (id, gameId, changes) =>
+  emptyRow({ id, game_id: gameId, kind: 'sub', result: 'SUB', subs: changes, description: '' })
 
 /**
  * 「插入打者」會讓這一棒以後的人往後移一棒（或刪掉時往前移）。
@@ -218,6 +216,15 @@ export function shiftLaterSubs(rows, fromIndex, side, at, delta) {
   })
 }
 
+/** 一筆換人紀錄裡如果有「插入打者」，把它之後的換人棒次一起調整（delta = +1 加入，-1 移除） */
+export function shiftForInsertions(rows, fromIndex, subRow, delta) {
+  let next = rows
+  for (const c of subRow.subs ?? []) {
+    if (c.type === 'ins') next = shiftLaterSubs(next, fromIndex, c.side, Number(c.order), delta)
+  }
+  return next
+}
+
 export const updateRow = (rows, id, patch) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r))
 
 /** 插在 beforeId 這一筆之前；beforeId 為 null 就加到最後 */
@@ -228,8 +235,6 @@ export function insertBefore(rows, beforeId, row) {
   return next
 }
 
-export const removeRow = (rows, id) => rows.filter((r) => r.id !== id)
-
 /**
  * 這串紀錄「全部發生之後」的局面、下一位打者與打線（修改、插入時，確認畫面要用）
  * 傳入的 rows 通常是「某一筆之前」的那一段
@@ -238,16 +243,6 @@ export function stateAt(rows, startLineups, ctx, teamNames) {
   const { rows: rebuilt, state } = rebuildTimeline(rows, startLineups, ctx, teamNames)
   const lineupState = buildLineupState(startLineups, rebuilt)
   const side = state.half === 'top' ? 'away' : 'home'
-  const order = state.nextBatter[side]
-  const batter = lineupState.lineups[side][order - 1] ?? { order, name: '', number: null, playerId: null }
+  const batter = batterAt(lineupState.lineups, side, state.nextBatter[side])
   return { state, batter, lineupState }
-}
-
-/**
- * 某一筆「發生之前」的局面與打者
- * @param atId 這一筆的 id；null 代表最後（全部紀錄之後）
- */
-export function stateBefore(rows, atId, startLineups, ctx, teamNames) {
-  const index = atId ? rows.findIndex((r) => r.id === atId) : -1
-  return stateAt(index < 0 ? rows : rows.slice(0, index), startLineups, ctx, teamNames)
 }

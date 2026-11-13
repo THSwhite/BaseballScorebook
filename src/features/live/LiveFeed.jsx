@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { RESULT_MAP } from '../../utils/plateAppearance'
+import { hasNumber } from '../../utils/formatters'
 
 const CHIP = {
   hit: 'bg-emerald-800 text-white',
@@ -7,8 +8,6 @@ const CHIP = {
   out: 'bg-stone-200 text-stone-800',
   other: 'border border-stone-300 bg-white text-stone-700',
 }
-
-const hasNumber = (n) => n !== null && n !== undefined && n !== ''
 
 function batterLine(play) {
   const who = [hasNumber(play.batter_number) ? `#${play.batter_number}` : null, play.batter_name || null]

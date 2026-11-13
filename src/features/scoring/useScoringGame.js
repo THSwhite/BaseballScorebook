@@ -8,12 +8,19 @@ import {
   validateDetails,
 } from '../../utils/plateAppearance'
 import { describePlateAppearance, describeSubstitutions } from '../../utils/formatters'
-import { buildLineupState, normalizeChanges, validateSubstitutions } from '../../utils/lineup'
+import {
+  batterAt,
+  buildLineupState,
+  gameContext,
+  lineupsFromRows,
+  normalizeChanges,
+  validateSubstitutions,
+} from '../../utils/lineup'
 import { isPA } from '../../utils/gameSummary'
+import { emptyRow } from '../../utils/history'
 import * as queue from './offlineQueue'
 
 const TABLE = 'plate_appearances'
-const GENERIC_LINEUP_SIZE = 9 // 沒設定先發名單時，用 9 棒輪轉
 const NOTE_MAX = 200 // 備註最多幾個字
 
 const eventsKey = (id) => `scoring:events:${id}`
@@ -34,20 +41,6 @@ function writeJson(key, value) {
   } catch {
     // 儲存空間不足：略過，不影響線上記錄
   }
-}
-
-function toLineups(rows) {
-  const out = { away: [], home: [] }
-  for (const r of rows ?? []) {
-    out[r.team_side]?.push({
-      order: r.batting_order,
-      name: r.player_name ?? '',
-      number: r.jersey_number ?? null,
-      playerId: r.player_id ?? null,
-      position: r.position,
-    })
-  }
-  return out
 }
 
 // 伺服器資料 + 依序套用還沒送出的新增、修改、刪除（含修改歷史）
@@ -118,7 +111,7 @@ export function useScoringGame(game) {
       ])
       if (cancelled) return
       if (!lineupRes.error) {
-        const next = toLineups(lineupRes.data)
+        const next = lineupsFromRows(lineupRes.data)
         setStartLineups(next)
         writeJson(lineupsKey(game.id), next)
       }
@@ -147,14 +140,7 @@ export function useScoringGame(game) {
   const lineups = lineupState.lineups
 
   const ctx = useMemo(
-    () => ({
-      innings: game.innings ?? 9,
-      initialSetSize: game.set_size ?? 1, // 建立比賽時選的 1set / 2set；中途更改記在紀錄裡
-      lineupSize: {
-        away: startLineups.away.length || GENERIC_LINEUP_SIZE,
-        home: startLineups.home.length || GENERIC_LINEUP_SIZE,
-      },
-    }),
+    () => gameContext({ innings: game.innings, set_size: game.set_size }, startLineups),
     [game.innings, game.set_size, startLineups]
   )
 
@@ -163,8 +149,10 @@ export function useScoringGame(game) {
   const finished = state.over || manualFinished
 
   const side = state.half === 'top' ? 'away' : 'home'
-  const order = state.nextBatter[side]
-  const currentBatter = lineups[side][order - 1] ?? { order, name: '', number: null, playerId: null }
+  const currentBatter = useMemo(
+    () => batterAt(lineups, side, state.nextBatter[side]),
+    [lineups, side, state.nextBatter]
+  )
 
   /** 預覽／驗證一個打席（不寫入） */
   const evaluate = useCallback(
@@ -264,31 +252,18 @@ export function useScoringGame(game) {
 
   // 備註、更改 set 也是時間軸上的一筆紀錄：跟打席共用 seq，所以順序與復原都一致
   const makeRow = useCallback(
-    (kind, extra) => ({
-      id: queue.newId(),
-      game_id: game.id,
-      seq: events.length + 1,
-      kind,
-      inning: state.inning,
-      half: state.half,
-      set_no: state.setNo,
-      batting_order: 0,
-      batter_id: null,
-      batter_name: '',
-      batter_number: null,
-      outs_before: state.outs,
-      outs_added: 0,
-      runs: 0,
-      rbi: 0,
-      runners: [],
-      batter_to: 0,
-      hit_type: null,
-      hit_direction: null,
-      with_error: false,
-      with_fc: false,
-      set_size: null,
-      ...extra,
-    }),
+    (kind, extra) =>
+      emptyRow({
+        id: queue.newId(),
+        game_id: game.id,
+        seq: events.length + 1,
+        kind,
+        inning: state.inning,
+        half: state.half,
+        set_no: state.setNo,
+        outs_before: state.outs,
+        ...extra,
+      }),
     [game.id, events.length, state.inning, state.half, state.setNo, state.outs]
   )
 

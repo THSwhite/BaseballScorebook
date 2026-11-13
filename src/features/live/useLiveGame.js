@@ -1,25 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { replay } from '../../utils/plateAppearance'
-import { buildLineupState } from '../../utils/lineup'
+import { buildLineupState, gameContext, lineupsFromRows } from '../../utils/lineup'
 import { buildBoxScore, buildFeed, isPA, teamTotals } from '../../utils/gameSummary'
 
 const POLL_MS = 8000 // 即時推送失效時的保底輪詢間隔
-const GENERIC_LINEUP_SIZE = 9
-
-function toLineups(rows) {
-  const out = { away: [], home: [] }
-  for (const r of rows ?? []) {
-    out[r.team_side]?.push({
-      order: r.batting_order,
-      name: r.player_name ?? '',
-      number: r.jersey_number ?? null,
-      playerId: r.player_id ?? null,
-      position: r.position,
-    })
-  }
-  return out
-}
 
 /**
  * 訪客看轉播：讀取比賽、先發、打席，並即時更新
@@ -64,7 +49,7 @@ export function useLiveGame(gameId) {
       .eq('game_id', gameId)
       .order('batting_order')
     // 讀不到先發名單（例如沒有開放訪客讀取）不影響轉播，只是少了名單
-    if (!err) setStartLineups(toLineups(data))
+    if (!err) setStartLineups(lineupsFromRows(data))
   }, [gameId])
 
   const refresh = useCallback(() => Promise.all([loadGame(), loadEvents()]), [loadGame, loadEvents])
@@ -129,17 +114,10 @@ export function useLiveGame(gameId) {
     }
   }, [gameId, refresh])
 
-  const ctx = useMemo(
-    () => ({
-      innings: game?.innings ?? 9,
-      initialSetSize: game?.set_size ?? 1,
-      lineupSize: {
-        away: startLineups.away.length || GENERIC_LINEUP_SIZE,
-        home: startLineups.home.length || GENERIC_LINEUP_SIZE,
-      },
-    }),
-    [game?.innings, game?.set_size, startLineups]
-  )
+  // 只在局數或 set 設定改變時重算（輪詢會一直換新的 game 物件）
+  const innings = game?.innings
+  const setSize = game?.set_size
+  const ctx = useMemo(() => gameContext({ innings, set_size: setSize }, startLineups), [innings, setSize, startLineups])
 
   const state = useMemo(() => replay(events, ctx), [events, ctx])
   const groups = useMemo(() => buildFeed(events), [events])
