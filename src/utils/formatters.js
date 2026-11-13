@@ -3,34 +3,34 @@
  * 把打席資料轉成轉播用的文字（記錄頁與訪客轉播頁共用）
  */
 
+import {
+  BATTER_OUT,
+  DIRECTION_OPTIONS,
+  ERROR_KIND_OPTIONS,
+  HEIGHT_OPTIONS,
+  HIT_BASE,
+} from './plateAppearance'
+import { POSITION_NAMES } from './baseballRules'
+
 export const BASE_NAMES = { 1: '一壘', 2: '二壘', 3: '三壘' }
 
-// 擊球方向（守備位置）與高度的中文
-const ZONE_NAMES = {
-  P: '投手', C: '捕手', '1B': '一壘', '2B': '二壘', '3B': '三壘', SS: '游擊',
-  LF: '左外野', CF: '中外野', RF: '右外野', SF: '自由球員',
-}
-const HEIGHT_NAMES = { ground: '滾地', line: '平飛', fly: '高飛' }
+// 擊球方向（守備位置）、高度、失誤類型的中文：直接沿用記錄畫面的選項
+const ZONE_NAMES = Object.fromEntries(DIRECTION_OPTIONS.map((o) => [o.value, o.name]))
+const HEIGHT_NAMES = Object.fromEntries(HEIGHT_OPTIONS.map((o) => [o.value, o.label]))
+const ERROR_KIND_NAMES = Object.fromEntries(ERROR_KIND_OPTIONS.map((o) => [o.value, o.label]))
 const BALL_NOUN = { ground: '滾地球', line: '平飛球', fly: '高飛球' }
-const HIT_BASE = { '1B': 1, '2B': 2, '3B': 3 } // 安打讓打者上到的壘包
 
 // 守備位置編號（記分表的寫法）
 export const FIELDER_NAMES = {
   1: '投手', 2: '捕手', 3: '一壘手', 4: '二壘手', 5: '三壘手',
   6: '游擊手', 7: '左外野手', 8: '中外野手', 9: '右外野手', 10: '自由球員',
 }
-const ERROR_KIND_NAMES = { catch: '接球失誤', throw: '傳球失誤', field: '處理失誤' }
-// 打者本人出局的結果：守備路線說的就是打者的出局
-const BATTER_OUT_RESULTS = new Set(['OUT', 'DP', 'SF', 'SH', 'GO', 'FO', 'LO', 'PO'])
 
-// 換人的類型與守位名稱
+// 換人的類型
 export const SUB_LABEL = { pr: '代跑', ph: '代打', sub: '換人', swap: '守位交換', ins: '插入打者' }
-export const POSITION_NAMES = {
-  P: '投手', C: '捕手', '1B': '一壘手', '2B': '二壘手', '3B': '三壘手', SS: '游擊手',
-  LF: '左外野手', CF: '中外野手', RF: '右外野手', SF: '自由球員', DH: '指定打擊',
-}
 
-const hasNumber = (n) => n !== null && n !== undefined && n !== ''
+/** 背號有沒有填（0 也算有填） */
+export const hasNumber = (n) => n !== null && n !== undefined && n !== ''
 
 /** 球員顯示名稱：有姓名用姓名，沒有就用背號，再沒有就用打序 */
 export function playerLabel(p, { asRunner = false } = {}) {
@@ -188,7 +188,7 @@ export function describePlateAppearance(pa) {
     seq.length && result !== 'E'
       ? `${fieldingNotation(seq, height)} ${describeFielding(seq, { height, result })}`.trim()
       : ''
-  const routeOnBatter = BATTER_OUT_RESULTS.has(result)
+  const routeOnBatter = result !== 'K' && BATTER_OUT.has(result) // 三振不會有守備路線
   if (route && routeOnBatter) parts[0] += `（${route}）`
 
   if (withError) parts.push(`守備同時出現失誤${errorText ? `（${errorText}）` : ''}`)

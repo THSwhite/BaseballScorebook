@@ -1,3 +1,5 @@
+import { hasNumber } from '../../utils/formatters'
+
 const COLS = [
   { key: 'ab', label: '打數' },
   { key: 'h', label: '安打' },
@@ -6,8 +8,6 @@ const COLS = [
   { key: 'bb', label: '四死' },
   { key: 'k', label: '三振' },
 ]
-
-const hasNumber = (n) => n !== null && n !== undefined && n !== ''
 
 function TeamTable({ name, rows }) {
   const totals = COLS.reduce((acc, c) => ({ ...acc, [c.key]: rows.reduce((sum, r) => sum + r[c.key], 0) }), {})

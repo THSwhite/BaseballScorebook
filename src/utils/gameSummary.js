@@ -2,15 +2,15 @@
  * gameSummary.js
  * 把一場比賽的打席資料整理成轉播頁要顯示的樣子（純函式）
  */
-import { HIT_RESULTS } from './plateAppearance'
+import { HIT_RESULTS, kindOf } from './plateAppearance'
 import { SUB_LABEL } from './formatters'
 import { samePlayer } from './lineup'
 
 // 不算打數的結果：四壞球、觸身球、犧牲打、犧牲觸擊
 const NOT_AB = new Set(['BB', 'HBP', 'SF', 'SH'])
 
-/** 紀錄的種類：pa 打席（舊資料沒有 kind，也當作打席）、note 備註、set 更改一次連打幾局、sub 換人 */
-export const isPA = (e) => (e.kind ?? 'pa') === 'pa'
+/** 是不是打席（備註、set 更改、換人都不是） */
+export const isPA = (e) => kindOf(e) === 'pa'
 
 /**
  * 依半局分組（2set 時同一隊連打的兩局會分成兩組）。
@@ -22,7 +22,7 @@ export function buildFeed(events) {
   let current = null
 
   for (const e of events) {
-    const kind = e.kind ?? 'pa'
+    const kind = kindOf(e)
     const side = e.half === 'top' ? 'away' : 'home'
     const setNo = e.set_no ?? 1
     if (kind === 'pa') score[side] += e.runs
@@ -104,7 +104,7 @@ export function buildBoxScore(events, lineups) {
     )
 
     for (const e of events) {
-      const kind = e.kind ?? 'pa'
+      const kind = kindOf(e)
       if (kind === 'sub') {
         for (const c of e.subs ?? []) {
           if (c.side !== side) continue

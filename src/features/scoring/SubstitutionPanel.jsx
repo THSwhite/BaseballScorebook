@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import PlayerPicker from '../teams/PlayerPicker'
-import { POSITIONS } from '../games/LineupEditor'
+import { POSITION_NAMES, POSITION_OPTIONS } from '../../utils/baseballRules'
 import { SUB_TYPE_OPTIONS } from '../../utils/lineup'
-import { POSITION_NAMES, runnerLabel } from '../../utils/formatters'
+import { hasNumber, runnerLabel } from '../../utils/formatters'
 import '../teams/teams.css'
 
 // PlayerPicker 用到的顏色變數（原本定義在 .tm-page，這裡補上讓它在這個面板也能正常顯示）
@@ -19,7 +19,6 @@ const TYPE_HINT = {
   swap: '兩棒互換守位，球員不換。',
 }
 
-const hasNumber = (n) => n !== null && n !== undefined && n !== ''
 const keyOf = (side, order) => `${side}:${order}`
 
 const fieldClass =
@@ -256,7 +255,7 @@ export default function SubstitutionPanel({ game, lineups, retired, state, onSub
                               className={`${fieldClass} min-w-0 flex-1`}
                             >
                               <option value="">沿用原守位</option>
-                              {POSITIONS.map((p) => (
+                              {POSITION_OPTIONS.map((p) => (
                                 <option key={p.value} value={p.value}>{p.label}</option>
                               ))}
                             </select>
@@ -343,7 +342,7 @@ export default function SubstitutionPanel({ game, lineups, retired, state, onSub
                 onChange={(e) => patchInsert({ position: e.target.value })}
                 className={`${fieldClass} min-w-0 flex-1`}
               >
-                {POSITIONS.map((p) => (
+                {POSITION_OPTIONS.map((p) => (
                   <option key={p.value} value={p.value}>{p.label}</option>
                 ))}
               </select>
@@ -361,7 +360,7 @@ export default function SubstitutionPanel({ game, lineups, retired, state, onSub
                         playerId: p.id,
                         name: p.name,
                         number: p.jersey_number ?? '',
-                        position: p.primary_position && POSITIONS.some((o) => o.value === p.primary_position) ? p.primary_position : insert.position,
+                        position: p.primary_position && POSITION_NAMES[p.primary_position] ? p.primary_position : insert.position,
                       })
                     }
                   />

@@ -53,7 +53,7 @@ export const RESULT_MAP = Object.fromEntries([...RESULT_LIST, ...LEGACY_RESULTS]
 export const HIT_RESULTS = new Set(['1B', '2B', '3B', 'HR'])
 // 安打讓打者上到的壘包（4 = 全壘打）。附有失誤時，打者可以再多進，但不能比這個少
 export const HIT_BASE = { '1B': 1, '2B': 2, '3B': 3, HR: 4 }
-const BATTER_OUT = new Set(['K', 'OUT', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF', 'SH']) // 打者本人出局
+export const BATTER_OUT = new Set(['K', 'OUT', 'GO', 'FO', 'LO', 'PO', 'DP', 'SF', 'SH']) // 打者本人出局
 const NO_RBI = new Set(['E', 'DP']) // 這兩種不記打點
 
 /* ---------- 擊球方向、高度、附加情況（extra2 打擊習慣用）---------- */
@@ -386,6 +386,9 @@ export function evaluatePlateAppearance(state, pa, ctx = {}) {
 }
 
 /* ---------- 重播 ---------- */
+/** 紀錄的種類：pa 打席（舊資料沒有 kind，也當作打席）、note 備註、set 更改一次連打幾局、sub 換人 */
+export const kindOf = (row) => row.kind ?? 'pa'
+
 // 資料庫的一列 → 打席輸入
 export function rowToPa(row) {
   return {
@@ -442,7 +445,7 @@ export function applySubsToState(state, subs = []) {
 export function replay(rows, ctx = {}) {
   let state = initialState(ctx.initialSetSize ?? 1)
   for (const row of rows) {
-    const kind = row.kind ?? 'pa'
+    const kind = kindOf(row)
     if (kind === 'note') continue
     if (kind === 'sub') {
       state = applySubsToState(state, row.subs)
