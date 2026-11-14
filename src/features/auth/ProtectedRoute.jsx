@@ -1,5 +1,5 @@
 import { Navigate, useLocation } from 'react-router-dom'
-import { useAuth } from './AuthContext'
+import { useAuth } from './useAuth'
 
 // 沒登入就導向登入頁，登入後會回到原本要去的頁面
 export default function ProtectedRoute({ children }) {

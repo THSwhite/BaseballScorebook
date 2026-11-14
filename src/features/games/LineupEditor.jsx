@@ -2,17 +2,8 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import PlayerPicker from '../teams/PlayerPicker'
 import { DH, POSITION_NAMES, POSITION_OPTIONS } from '../../utils/baseballRules'
-import '../teams/teams.css'
-
 
 const MIN_SLOTS = 9 // 預設列數；棒次沒有上限，可無限增加
-
-// PlayerPicker 用到的顏色變數（原本定義在 .tm-page，這裡補上讓它在先發視窗也能正常顯示）
-const pickerVars = {
-  '--tm-accent': '#ba265c',
-  '--tm-line': 'rgba(128, 128, 128, 0.3)',
-  '--tm-soft': 'rgba(128, 128, 128, 0.1)',
-}
 
 let keyCounter = 0
 const newSlot = (overrides = {}) => ({
@@ -197,7 +188,7 @@ export default function LineupEditor({ game, side, onSaved }) {
           <summary className="cursor-pointer text-sm font-medium text-stone-700">
             從球隊名單選擇（點選球員，依序填入打序）
           </summary>
-          <div className="mt-3" style={pickerVars}>
+          <div className="mt-3">
             <PlayerPicker
               teamId={teamId}
               excludeIds={slots.map((s) => s.player_id).filter(Boolean)}

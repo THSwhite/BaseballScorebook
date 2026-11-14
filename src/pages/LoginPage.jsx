@@ -1,6 +1,6 @@
 import { Navigate, useLocation, useNavigate } from 'react-router-dom'
 import LoginForm from '../features/auth/LoginForm'
-import { useAuth } from '../features/auth/AuthContext'
+import { useAuth } from '../features/auth/useAuth'
 
 export default function LoginPage() {
   const { user, loading } = useAuth()
