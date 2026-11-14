@@ -22,43 +22,58 @@ export function useLiveGame(gameId) {
   const eventsRef = useRef([])
   const connectedRef = useRef(false)
 
-  const loadGame = useCallback(async () => {
-    const { data, error: err } = await supabase.from('games').select('*').eq('id', gameId).maybeSingle()
-    if (err) return err.code ? setError(`讀取失敗：${err.message}`) : undefined // 沒有代碼 = 斷線，保留舊畫面
-    if (!data) return setError('找不到這場比賽。')
-    setGame(data)
-    setUpdatedAt(Date.now())
-  }, [gameId])
+  // 讀取失敗時：有錯誤代碼才顯示錯誤；沒有代碼 = 斷線，保留舊畫面等下次更新
+  const loadGame = useCallback(
+    () =>
+      supabase
+        .from('games')
+        .select('*')
+        .eq('id', gameId)
+        .maybeSingle()
+        .then(({ data, error: err }) => {
+          if (err) return err.code ? setError(`讀取失敗：${err.message}`) : undefined
+          if (!data) return setError('找不到這場比賽。')
+          setGame(data)
+          setUpdatedAt(Date.now())
+        }),
+    [gameId]
+  )
 
-  const loadEvents = useCallback(async () => {
-    const { data, error: err } = await supabase
-      .from('plate_appearances')
-      .select('*')
-      .eq('game_id', gameId)
-      .order('seq')
-    if (err) return err.code ? setError(`讀取失敗：${err.message}`) : undefined
-    eventsRef.current = data
-    setEvents(data)
-    setUpdatedAt(Date.now())
-  }, [gameId])
+  const loadEvents = useCallback(
+    () =>
+      supabase
+        .from('plate_appearances')
+        .select('*')
+        .eq('game_id', gameId)
+        .order('seq')
+        .then(({ data, error: err }) => {
+          if (err) return err.code ? setError(`讀取失敗：${err.message}`) : undefined
+          eventsRef.current = data
+          setEvents(data)
+          setUpdatedAt(Date.now())
+        }),
+    [gameId]
+  )
 
-  const loadLineups = useCallback(async () => {
-    const { data, error: err } = await supabase
-      .from('lineups')
-      .select('*')
-      .eq('game_id', gameId)
-      .order('batting_order')
-    // 讀不到先發名單（例如沒有開放訪客讀取）不影響轉播，只是少了名單
-    if (!err) setStartLineups(lineupsFromRows(data))
-  }, [gameId])
+  const loadLineups = useCallback(
+    () =>
+      supabase
+        .from('lineups')
+        .select('*')
+        .eq('game_id', gameId)
+        .order('batting_order')
+        .then(({ data, error: err }) => {
+          // 讀不到先發名單（例如沒有開放訪客讀取）不影響轉播，只是少了名單
+          if (!err) setStartLineups(lineupsFromRows(data))
+        }),
+    [gameId]
+  )
 
   const refresh = useCallback(() => Promise.all([loadGame(), loadEvents()]), [loadGame, loadEvents])
 
-  // 初次載入
+  // 初次載入（換場次時，轉播頁會用 key 重新建立，所以這裡不用重設狀態）
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
-    setError('')
     Promise.all([loadGame(), loadEvents(), loadLineups()]).finally(() => !cancelled && setLoading(false))
     return () => {
       cancelled = true

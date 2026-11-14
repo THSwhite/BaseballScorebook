@@ -7,9 +7,12 @@ import {
   errorMessage,
 } from './teamsApi'
 import { POSITION_NAMES, POSITION_OPTIONS } from '../../utils/baseballRules'
+import { buttonClass, errorClass, inputClass, labelClass, mutedClass } from '../../components/styles'
 
 const BATS_LABEL = { R: '右打', L: '左打', S: '左右開弓' }
 const THROWS_LABEL = { R: '右投', L: '左投' }
+
+const linkButton = 'rounded px-2 py-1 text-sm font-medium hover:bg-stone-100'
 
 /* ---------- 新增／編輯用的小表單 ---------- */
 function PlayerForm({ initial, submitLabel, onSubmit, onCancel }) {
@@ -20,6 +23,7 @@ function PlayerForm({ initial, submitLabel, onSubmit, onCancel }) {
   const [throwsHand, setThrowsHand] = useState(initial?.throws ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const idPrefix = `player-${initial?.id ?? 'new'}`
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -50,75 +54,59 @@ function PlayerForm({ initial, submitLabel, onSubmit, onCancel }) {
     }
   }
 
+  const select = (id, label, value, onChange, options) => (
+    <div className="min-w-28 flex-1">
+      <label htmlFor={id} className={labelClass}>{label}</label>
+      <select id={id} value={value} onChange={(e) => onChange(e.target.value)} className={inputClass}>
+        <option value="">未指定</option>
+        {options.map(([k, v]) => (
+          <option key={k} value={k}>{v}</option>
+        ))}
+      </select>
+    </div>
+  )
+
   return (
-    <form className="tm-player-form" onSubmit={handleSubmit}>
-      <div className="tm-player-form-grid">
-        <label className="tm-field tm-field-sm">
-          <span>背號</span>
+    <form onSubmit={handleSubmit} className="my-3 space-y-4 rounded-lg border border-stone-200 bg-white p-4">
+      <div className="flex flex-wrap gap-3">
+        <div className="w-20">
+          <label htmlFor={`${idPrefix}-number`} className={labelClass}>背號</label>
           <input
+            id={`${idPrefix}-number`}
             type="number"
             inputMode="numeric"
             min="0"
             max="999"
             value={number}
             onChange={(e) => setNumber(e.target.value)}
+            className={inputClass}
           />
-        </label>
+        </div>
 
-        <label className="tm-field tm-field-grow">
-          <span>姓名</span>
+        <div className="min-w-40 flex-[2]">
+          <label htmlFor={`${idPrefix}-name`} className={labelClass}>姓名</label>
           <input
+            id={`${idPrefix}-name`}
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={30}
             autoFocus
+            className={inputClass}
           />
-        </label>
+        </div>
 
-        <label className="tm-field">
-          <span>主要守位</span>
-          <select value={position} onChange={(e) => setPosition(e.target.value)}>
-            <option value="">未指定</option>
-            {POSITION_OPTIONS.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="tm-field">
-          <span>打擊</span>
-          <select value={bats} onChange={(e) => setBats(e.target.value)}>
-            <option value="">未指定</option>
-            {Object.entries(BATS_LABEL).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="tm-field">
-          <span>投球</span>
-          <select value={throwsHand} onChange={(e) => setThrowsHand(e.target.value)}>
-            <option value="">未指定</option>
-            {Object.entries(THROWS_LABEL).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
-            ))}
-          </select>
-        </label>
+        {select(`${idPrefix}-position`, '主要守位', position, setPosition, POSITION_OPTIONS.map((p) => [p.value, p.label]))}
+        {select(`${idPrefix}-bats`, '打擊', bats, setBats, Object.entries(BATS_LABEL))}
+        {select(`${idPrefix}-throws`, '投球', throwsHand, setThrowsHand, Object.entries(THROWS_LABEL))}
       </div>
 
-      {error && <p className="tm-error">{error}</p>}
+      {error && <p role="alert" className={errorClass}>{error}</p>}
 
-      <div className="tm-actions">
-        <button type="submit" className="tm-btn tm-btn-primary" disabled={saving}>
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" disabled={saving} className={buttonClass.primary}>
           {saving ? '儲存中…' : submitLabel}
         </button>
-        <button type="button" className="tm-btn" onClick={onCancel} disabled={saving}>
+        <button type="button" onClick={onCancel} disabled={saving} className={buttonClass.secondary}>
           取消
         </button>
       </div>
@@ -135,17 +123,17 @@ export default function PlayerList({ team, onChanged }) {
   const [adding, setAdding] = useState(false)
   const [editingId, setEditingId] = useState(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError('')
-    try {
-      setPlayers(await fetchPlayers(team.id))
-    } catch (err) {
-      setError(errorMessage(err))
-    } finally {
-      setLoading(false)
-    }
-  }, [team.id])
+  const load = useCallback(
+    () =>
+      fetchPlayers(team.id)
+        .then((data) => {
+          setPlayers(data)
+          setError('')
+        })
+        .catch((err) => setError(errorMessage(err)))
+        .finally(() => setLoading(false)),
+    [team.id]
+  )
 
   useEffect(() => {
     load()
@@ -176,17 +164,17 @@ export default function PlayerList({ team, onChanged }) {
   }
 
   return (
-    <section className="tm-section">
-      <div className="tm-section-head">
-        <h3>球員名單（{players.length}）</h3>
+    <section className="mt-6">
+      <div className="mb-3 flex items-center justify-between gap-4">
+        <h3 className="text-lg font-semibold text-stone-900">球員名單（{players.length}）</h3>
         {!adding && (
-          <button className="tm-btn tm-btn-primary" onClick={() => setAdding(true)}>
+          <button type="button" onClick={() => setAdding(true)} className={buttonClass.primary}>
             新增球員
           </button>
         )}
       </div>
 
-      {error && <p className="tm-error">{error}</p>}
+      {error && <p role="alert" className={errorClass}>{error}</p>}
 
       {adding && (
         <PlayerForm
@@ -197,26 +185,26 @@ export default function PlayerList({ team, onChanged }) {
       )}
 
       {loading ? (
-        <p className="tm-muted">載入中…</p>
+        <p className={mutedClass}>載入中…</p>
       ) : players.length === 0 && !adding ? (
-        <p className="tm-muted">這支球隊還沒有球員，按「新增球員」開始建立名單。</p>
+        <p className={mutedClass}>這支球隊還沒有球員，按「新增球員」開始建立名單。</p>
       ) : (
-        <div className="tm-table-wrap">
-          <table className="tm-table">
+        <div className="overflow-x-auto rounded-lg border border-stone-200 bg-white">
+          <table className="w-full whitespace-nowrap text-left text-sm">
             <thead>
-              <tr>
-                <th>背號</th>
-                <th>姓名</th>
-                <th>守位</th>
-                <th>投打</th>
-                <th aria-label="操作" />
+              <tr className="border-b border-stone-200 text-xs text-stone-500">
+                <th className="w-14 px-3 py-2 font-medium">背號</th>
+                <th className="px-3 py-2 font-medium">姓名</th>
+                <th className="px-3 py-2 font-medium">守位</th>
+                <th className="px-3 py-2 font-medium">投打</th>
+                <th className="px-3 py-2" aria-label="操作" />
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-stone-100">
               {players.map((p) =>
                 editingId === p.id ? (
                   <tr key={p.id}>
-                    <td colSpan={5}>
+                    <td colSpan={5} className="px-3">
                       <PlayerForm
                         initial={p}
                         submitLabel="儲存變更"
@@ -226,19 +214,18 @@ export default function PlayerList({ team, onChanged }) {
                     </td>
                   </tr>
                 ) : (
-                  <tr key={p.id}>
-                    <td className="tm-num">{p.jersey_number ?? '–'}</td>
-                    <td>{p.name}</td>
-                    <td>{POSITION_NAMES[p.primary_position] ?? p.primary_position ?? '–'}</td>
-                    <td>
-                      {[THROWS_LABEL[p.throws], BATS_LABEL[p.bats]].filter(Boolean).join(' / ') ||
-                        '–'}
+                  <tr key={p.id} className="text-stone-900">
+                    <td className="px-3 py-2 tabular-nums text-stone-600">{p.jersey_number ?? '–'}</td>
+                    <td className="px-3 py-2 font-medium">{p.name}</td>
+                    <td className="px-3 py-2">{POSITION_NAMES[p.primary_position] ?? p.primary_position ?? '–'}</td>
+                    <td className="px-3 py-2 text-stone-600">
+                      {[THROWS_LABEL[p.throws], BATS_LABEL[p.bats]].filter(Boolean).join(' / ') || '–'}
                     </td>
-                    <td className="tm-row-actions">
-                      <button className="tm-link" onClick={() => setEditingId(p.id)}>
+                    <td className="whitespace-nowrap px-3 py-2 text-right">
+                      <button type="button" onClick={() => setEditingId(p.id)} className={`${linkButton} text-emerald-800`}>
                         編輯
                       </button>
-                      <button className="tm-link tm-danger" onClick={() => handleDelete(p)}>
+                      <button type="button" onClick={() => handleDelete(p)} className={`${linkButton} text-red-700`}>
                         刪除
                       </button>
                     </td>

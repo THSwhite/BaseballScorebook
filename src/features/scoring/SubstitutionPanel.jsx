@@ -3,14 +3,6 @@ import PlayerPicker from '../teams/PlayerPicker'
 import { POSITION_NAMES, POSITION_OPTIONS } from '../../utils/baseballRules'
 import { SUB_TYPE_OPTIONS } from '../../utils/lineup'
 import { hasNumber, runnerLabel } from '../../utils/formatters'
-import '../teams/teams.css'
-
-// PlayerPicker 用到的顏色變數（原本定義在 .tm-page，這裡補上讓它在這個面板也能正常顯示）
-const pickerVars = {
-  '--tm-accent': '#ba265c',
-  '--tm-line': 'rgba(128, 128, 128, 0.3)',
-  '--tm-soft': 'rgba(128, 128, 128, 0.1)',
-}
 
 const TYPE_HINT = {
   pr: '新球員接替這位跑者，之後的得分算在他身上。',
@@ -265,7 +257,7 @@ export default function SubstitutionPanel({ game, lineups, retired, state, onSub
                         {teamId && (
                           <details className="rounded-md border border-stone-200 p-2">
                             <summary className="cursor-pointer text-sm text-stone-700">從球隊名單選擇</summary>
-                            <div className="mt-2" style={pickerVars}>
+                            <div className="mt-2">
                               <PlayerPicker
                                 teamId={teamId}
                                 excludeIds={excludeIds}
@@ -351,7 +343,7 @@ export default function SubstitutionPanel({ game, lineups, retired, state, onSub
             {teamId && (
               <details className="rounded-md border border-stone-200 p-2">
                 <summary className="cursor-pointer text-sm text-stone-700">從球隊名單選擇</summary>
-                <div className="mt-2" style={pickerVars}>
+                <div className="mt-2">
                   <PlayerPicker
                     teamId={teamId}
                     excludeIds={excludeIds}

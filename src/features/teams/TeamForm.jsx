@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { createTeam, updateTeam, errorMessage } from './teamsApi'
+import { buttonClass, errorClass, inputClass, labelClass } from '../../components/styles'
 
 // team 有值 = 編輯，沒有 = 新增
 // 父層請加 key={team?.id ?? 'new'}，切換球隊時表單會自動重設
@@ -31,36 +32,40 @@ export default function TeamForm({ team = null, onSaved, onCancel }) {
   }
 
   return (
-    <form className="tm-form" onSubmit={handleSubmit}>
-      <label className="tm-field">
-        <span>球隊名稱</span>
+    <form onSubmit={handleSubmit} className="my-3 space-y-4 rounded-lg border border-stone-200 bg-white p-4">
+      <div>
+        <label htmlFor="team-name" className={labelClass}>球隊名稱</label>
         <input
+          id="team-name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="例如：高雄雷霆"
           maxLength={40}
           autoFocus
+          className={inputClass}
         />
-      </label>
+      </div>
 
-      <label className="tm-field">
-        <span>簡稱（轉播頁顯示用）</span>
+      <div>
+        <label htmlFor="team-short-name" className={labelClass}>簡稱（轉播頁顯示用）</label>
         <input
+          id="team-short-name"
           value={shortName}
           onChange={(e) => setShortName(e.target.value)}
           placeholder="例如：雷霆"
           maxLength={8}
+          className={inputClass}
         />
-      </label>
+      </div>
 
-      {error && <p className="tm-error">{error}</p>}
+      {error && <p role="alert" className={errorClass}>{error}</p>}
 
-      <div className="tm-actions">
-        <button type="submit" className="tm-btn tm-btn-primary" disabled={saving}>
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" disabled={saving} className={buttonClass.primary}>
           {saving ? '儲存中…' : team ? '儲存變更' : '建立球隊'}
         </button>
         {onCancel && (
-          <button type="button" className="tm-btn" onClick={onCancel} disabled={saving}>
+          <button type="button" onClick={onCancel} disabled={saving} className={buttonClass.secondary}>
             取消
           </button>
         )}

@@ -19,16 +19,20 @@ export default function GameList({ canManage = false, onEditLineup }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  const load = useCallback(async () => {
-    const { data, error: fetchError } = await supabase
-      .from('games')
-      .select('*')
-      .order('game_date', { ascending: false })
-      .order('game_time', { ascending: false })
-    if (fetchError) setError(`讀取失敗：${fetchError.message}`)
-    else setGames(data)
-    setLoading(false)
-  }, [])
+  const load = useCallback(
+    () =>
+      supabase
+        .from('games')
+        .select('*')
+        .order('game_date', { ascending: false })
+        .order('game_time', { ascending: false })
+        .then(({ data, error: fetchError }) => {
+          if (fetchError) setError(`讀取失敗：${fetchError.message}`)
+          else setGames(data)
+          setLoading(false)
+        }),
+    []
+  )
 
   useEffect(() => {
     load()

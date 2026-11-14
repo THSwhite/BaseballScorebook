@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import TeamForm from '../features/teams/TeamForm'
 import PlayerList from '../features/teams/PlayerList'
 import { fetchTeams, deleteTeam, errorMessage } from '../features/teams/teamsApi'
-import '../features/teams/teams.css'
+import { buttonClass, errorClass, mutedClass } from '../components/styles'
 
 export default function TeamsPage() {
   const [teams, setTeams] = useState([])
@@ -12,16 +12,17 @@ export default function TeamsPage() {
   const [creating, setCreating] = useState(false)
   const [editing, setEditing] = useState(false)
 
-  const load = useCallback(async () => {
-    setError('')
-    try {
-      setTeams(await fetchTeams())
-    } catch (err) {
-      setError(errorMessage(err))
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const load = useCallback(
+    () =>
+      fetchTeams()
+        .then((data) => {
+          setTeams(data)
+          setError('')
+        })
+        .catch((err) => setError(errorMessage(err)))
+        .finally(() => setLoading(false)),
+    []
+  )
 
   useEffect(() => {
     load()
@@ -29,18 +30,26 @@ export default function TeamsPage() {
 
   const selected = teams.find((t) => t.id === selectedId) ?? null
 
-  async function handleTeamSaved(team) {
-    await load()
-    setSelectedId(team.id)
+  function select(id) {
+    setSelectedId(id)
     setCreating(false)
     setEditing(false)
   }
 
+  function startCreating() {
+    setCreating(true)
+    setSelectedId(null)
+    setEditing(false)
+  }
+
+  async function handleTeamSaved(team) {
+    await load()
+    select(team.id)
+  }
+
   async function handleDelete() {
     if (!selected) return
-    const ok = window.confirm(
-      `確定要刪除「${selected.name}」嗎？球隊底下所有球員也會一併刪除。`
-    )
+    const ok = window.confirm(`確定要刪除「${selected.name}」嗎？球隊底下所有球員也會一併刪除。`)
     if (!ok) return
     try {
       await deleteTeam(selected.id)
@@ -52,70 +61,65 @@ export default function TeamsPage() {
   }
 
   return (
-    <div className="tm-page">
-      <h2>球隊管理</h2>
-      {error && <p className="tm-error">{error}</p>}
+    <main className="mx-auto max-w-4xl px-4 py-8">
+      <h1 className="mb-6 text-2xl font-bold text-stone-900">球隊管理</h1>
+      {error && <p role="alert" className={`mb-4 ${errorClass}`}>{error}</p>}
 
-      <div className="tm-layout">
+      <div className="grid gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
         {/* 左：球隊列表 */}
-        <aside>
+        <aside className="space-y-3">
           {loading ? (
-            <p className="tm-muted">載入中…</p>
+            <p className={mutedClass}>載入中…</p>
           ) : (
-            <ul className="tm-side-list">
-              {teams.map((t) => (
-                <li key={t.id}>
-                  <button
-                    className="tm-team-item"
-                    aria-current={t.id === selectedId}
-                    onClick={() => {
-                      setSelectedId(t.id)
-                      setCreating(false)
-                      setEditing(false)
-                    }}
-                  >
-                    <span>{t.name}</span>
-                    <span className="tm-muted">{t.players?.[0]?.count ?? 0} 人</span>
-                  </button>
-                </li>
-              ))}
+            <ul className="grid gap-1.5">
+              {teams.map((t) => {
+                const active = t.id === selectedId
+                return (
+                  <li key={t.id}>
+                    <button
+                      type="button"
+                      aria-current={active}
+                      onClick={() => select(t.id)}
+                      className={`flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2.5 text-left ${
+                        active
+                          ? 'border-emerald-700 bg-emerald-50 text-emerald-900'
+                          : 'border-stone-200 bg-white text-stone-900 hover:bg-stone-50'
+                      }`}
+                    >
+                      <span className="truncate font-medium">{t.name}</span>
+                      <span className="shrink-0 text-xs text-stone-500">{t.players?.[0]?.count ?? 0} 人</span>
+                    </button>
+                  </li>
+                )
+              })}
             </ul>
           )}
           {!loading && teams.length === 0 && !creating && (
-            <p className="tm-muted">還沒有球隊，先建立第一支吧。</p>
+            <p className={mutedClass}>還沒有球隊，先建立第一支吧。</p>
           )}
-          <button
-            className="tm-btn tm-btn-primary"
-            onClick={() => {
-              setCreating(true)
-              setSelectedId(null)
-              setEditing(false)
-            }}
-          >
+          <button type="button" onClick={startCreating} className={`w-full ${buttonClass.primary}`}>
             建立球隊
           </button>
         </aside>
 
         {/* 右：新增表單，或選中球隊的詳細內容 */}
-        <main className="tm-main">
+        <section className="min-w-0">
           {creating && (
             <TeamForm key="new" onSaved={handleTeamSaved} onCancel={() => setCreating(false)} />
           )}
 
           {!creating && selected && (
             <>
-              <div className="tm-team-head">
+              <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <h3>{selected.name}</h3>
-                  {selected.short_name && (
-                    <p className="tm-muted">簡稱：{selected.short_name}</p>
-                  )}
+                  <h2 className="text-xl font-bold text-stone-900">{selected.name}</h2>
+                  {selected.short_name && <p className={mutedClass}>簡稱：{selected.short_name}</p>}
                 </div>
-                <div className="tm-actions">
-                  <button className="tm-btn" onClick={() => setEditing((v) => !v)}>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={() => setEditing((v) => !v)} className={buttonClass.secondary}>
                     {editing ? '收起' : '編輯球隊'}
                   </button>
-                  <button className="tm-btn tm-danger" onClick={handleDelete}>
+                  <button type="button" onClick={handleDelete} className={buttonClass.danger}>
                     刪除球隊
                   </button>
                 </div>
@@ -135,10 +139,10 @@ export default function TeamsPage() {
           )}
 
           {!creating && !selected && !loading && teams.length > 0 && (
-            <p className="tm-muted">從左側選擇一支球隊，查看或編輯球員名單。</p>
+            <p className={mutedClass}>從左側選擇一支球隊，查看或編輯球員名單。</p>
           )}
-        </main>
+        </section>
       </div>
-    </div>
+    </main>
   )
 }

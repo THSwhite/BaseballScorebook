@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import GameList from '../features/games/GameList'
 import LineupEditor from '../features/games/LineupEditor'
 import Modal from '../components/Modal'
-import { useAuth } from '../features/auth/AuthContext'
+import { useAuth } from '../features/auth/useAuth'
 
 export default function HomePage() {
   const { user } = useAuth()
@@ -20,21 +20,21 @@ export default function HomePage() {
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8">
-    <div className="mb-6 flex items-center justify-between">
+      <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-stone-900">比賽列表</h1>
         {user && (
-        <div className="flex gap-2">
+          <div className="flex gap-2">
             <Link to="/teams" className="rounded-md border border-stone-300 bg-white px-4 py-2 text-sm font-medium text-stone-700 hover:bg-stone-100">
-            球隊管理
+              球隊管理
             </Link>
             <Link to="/games/new" className="rounded-md bg-emerald-800 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-900">
-            建立比賽
+              建立比賽
             </Link>
-        </div>
+          </div>
         )}
-    </div>
+      </div>
 
-    <GameList canManage={!!user} onEditLineup={openLineup} />
+      <GameList canManage={!!user} onEditLineup={openLineup} />
 
       <Modal open={!!lineupGame} onClose={() => setLineupGame(null)} title="編輯先發名單">
         {lineupGame && (

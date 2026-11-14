@@ -70,8 +70,13 @@ function UpdateIndicator({ connected, onRefresh }) {
   )
 }
 
+// 用 key 讓換場次（/game/a → /game/b）時整個轉播重新開始，不會殘留上一場的資料
 export default function LivePage() {
   const { id } = useParams()
+  return <LiveGame key={id} id={id} />
+}
+
+function LiveGame({ id }) {
   const live = useLiveGame(id)
   const [tab, setTab] = useState('feed')
   const { game } = live
