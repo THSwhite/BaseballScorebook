@@ -19,7 +19,23 @@ npm install
 npm run dev      # 開發伺服器
 npm run build    # 打包到 dist/
 npm run lint     # oxlint 檢查
+npm test         # 執行自動測試（vitest）
+npm run test:watch  # 修改程式時自動重跑測試
 ```
+
+## 自動測試
+
+計分規則都是純函式，測試放在 `src/utils/*.test.js`，共用的小工具在 `src/test/helpers.js`：
+
+| 檔案 | 測什麼 |
+|---|---|
+| `plateAppearance.test.js` | 跑者預設推進、得分與打點、第三個出局的得分、換局、1set／2set、輪棒、局數沒有上限 |
+| `lineup.test.js` | 換人、代打、守位交換、插入打者，以及換人的檢查規則 |
+| `history.test.js` | 修改歷史：插入、修改、刪除紀錄後，後面的打者與局面重新計算 |
+| `gameSummary.test.js` | 安打與失誤統計、打擊成績、轉播分組、局數比分表 |
+| `formatters.test.js` | 轉播文字、守備路線寫法、換人文字 |
+
+每次推送到 `main` 或開 PR，GitHub Actions 會自動跑 lint、測試和 build（`.github/workflows/test.yml`）。
 
 需要在 `.env.local` 設定 Supabase 連線：
 
@@ -42,7 +58,8 @@ src/
     games/          比賽列表、建立比賽、先發名單
     scoring/        記錄頁（記錄畫面、換人、修改歷史、離線佇列）
     live/           觀眾轉播頁
-  utils/            純函式（不含畫面），記錄頁與轉播頁共用
+  test/             測試共用的小工具
+  utils/            純函式（不含畫面），記錄頁與轉播頁共用；*.test.js 是測試
     baseballRules.js    規則常數、守備位置
     plateAppearance.js  打席引擎：套用一個打席、重播整場比賽
     lineup.js           先發 + 換人 → 目前打線
