@@ -6,11 +6,13 @@ import GameBoxScore from '../features/live/GameBoxScore'
 import { useLiveGame } from '../features/live/useLiveGame'
 import BaseDiamond from '../features/scoring/BaseDiamond'
 import { playerLabel } from '../utils/formatters'
+import { winnerOf } from '../utils/gameSummary'
 
 /* ---------- 目前局面：壘包、出局、打者 ---------- */
 function Situation({ game, state, lineups, finished }) {
   if (finished) {
-    const winnerName = state.winner ? (state.winner === 'home' ? game.home_team : game.away_team) : null
+    const winner = winnerOf(state.score)
+    const winnerName = winner ? (winner === 'home' ? game.home_team : game.away_team) : null
     return (
       <div className="rounded-lg border border-stone-200 bg-white p-4 text-center">
         <p className="text-lg font-semibold text-stone-900">比賽結束</p>
@@ -102,7 +104,7 @@ function LiveGame({ id }) {
   }
 
   const { state, totals } = live
-  const finished = state.over || game.status === 'finished'
+  const finished = game.status === 'finished'
   const started = live.started
   const status = finished ? 'finished' : started ? 'live' : 'scheduled'
 

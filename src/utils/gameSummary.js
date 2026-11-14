@@ -57,20 +57,32 @@ export function teamTotals(events) {
   return t
 }
 
+/** 比分領先的一方；同分回傳 null（比賽由記錄員手動結束，所以勝負直接看比分） */
+export function winnerOf(score) {
+  if (score.away === score.home) return null
+  return score.away > score.home ? 'away' : 'home'
+}
+
 /**
  * 局數比分表某一格要顯示什麼
  * 2set 時後攻打 1 下，客隊的 1、2 局都已經打完，所以不能只用「局數小於目前局」判斷，
  * 改成看這一格有沒有實際打過。
+ * @param finished 比賽已結束：正在打（還沒打）的半局不再顯示 0
  */
-export function lineScoreCell(state, side, inning) {
+export function lineScoreCell(state, side, inning, finished = false) {
   const value = state.lineScore[side][inning - 1]
   const batting = state.half === 'top' ? 'away' : 'home'
-  if (!state.over && side === batting && inning === state.inning) return value ?? 0 // 正在打的半局
-  if (value !== undefined) return value // 已經打過
-  // 後攻不用打（上半結束時後攻已領先）：比賽結束就是 X
-  if (state.over && side === 'home' && inning === state.inning && state.half === 'top') return 'X'
-  return ''
+  if (!finished && side === batting && inning === state.inning) return value ?? 0 // 正在打的半局
+  return value ?? '' // 已經打過就顯示，還沒打就空白
 }
+
+/** 局數比分表要顯示幾欄：至少 MIN_COLS 欄，打到更後面的局數就跟著加 */
+const MIN_COLS = 7
+export const lineScoreColumns = (state) =>
+  Array.from(
+    { length: Math.max(MIN_COLS, state.inning, state.lineScore.away.length, state.lineScore.home.length) },
+    (_, i) => i + 1
+  )
 
 /**
  * 單場打擊成績：每位球員一列。同一個打序換了人（代打、代跑、換人），會接在原球員下面各一列

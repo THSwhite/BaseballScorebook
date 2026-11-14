@@ -59,10 +59,11 @@ function mergeWithQueue(serverRows, gameId) {
   return [...byId.values()].sort((a, b) => a.seq - b.seq)
 }
 
+// 比賽不會自動結束：「已結束」只由記錄員按「結束比賽」設定（見 finishGame）
 const gamePatch = (state, eventCount) => ({
   away_score: state.score.away,
   home_score: state.score.home,
-  status: state.over ? 'finished' : eventCount === 0 ? 'scheduled' : 'live',
+  status: eventCount === 0 ? 'scheduled' : 'live',
 })
 
 /**
@@ -74,7 +75,7 @@ export function useScoringGame(game) {
   const [startLineups, setStartLineups] = useState(() => readJson(lineupsKey(game.id), { away: [], home: [] })) // 原始先發
   const [loading, setLoading] = useState(() => readJson(lineupsKey(game.id), null) === null)
   const [error, setError] = useState('')
-  const [manualFinished, setManualFinished] = useState(game.status === 'finished')
+  const [finished, setFinished] = useState(game.status === 'finished')
 
   const [pending, setPending] = useState(queue.pendingCount())
   const [failed, setFailed] = useState(queue.getFailed())
@@ -140,13 +141,12 @@ export function useScoringGame(game) {
   const lineups = lineupState.lineups
 
   const ctx = useMemo(
-    () => gameContext({ innings: game.innings, set_size: game.set_size }, startLineups),
-    [game.innings, game.set_size, startLineups]
+    () => gameContext({ set_size: game.set_size }, startLineups),
+    [game.set_size, startLineups]
   )
 
   const state = useMemo(() => replay(events, ctx), [events, ctx])
   const paCount = useMemo(() => events.filter(isPA).length, [events]) // 備註與 set 更改不算打席
-  const finished = state.over || manualFinished
 
   const side = state.half === 'top' ? 'away' : 'home'
   const currentBatter = useMemo(
@@ -231,13 +231,13 @@ export function useScoringGame(game) {
     touched.current = true
     const rest = events.slice(0, -1)
     setEvents(rest)
-    setManualFinished(false)
+    setFinished(false)
     if (!queue.removeInsert(last.id)) queue.enqueue({ type: 'delete', table: TABLE, id: last.id })
     queue.enqueue({ type: 'game', gameId: game.id, patch: gamePatch(replay(rest, ctx), rest.filter(isPA).length) })
   }, [events, ctx, game.id])
 
   const finishGame = useCallback(() => {
-    setManualFinished(true)
+    setFinished(true)
     queue.enqueue({
       type: 'game',
       gameId: game.id,
@@ -246,7 +246,7 @@ export function useScoringGame(game) {
   }, [game.id, state, paCount])
 
   const reopenGame = useCallback(() => {
-    setManualFinished(false)
+    setFinished(false)
     queue.enqueue({ type: 'game', gameId: game.id, patch: gamePatch(state, paCount) })
   }, [game.id, state, paCount])
 
@@ -348,10 +348,10 @@ export function useScoringGame(game) {
       queue.enqueue({
         type: 'game',
         gameId: game.id,
-        patch: manualFinished ? { ...patch, status: 'finished' } : patch,
+        patch: finished ? { ...patch, status: 'finished' } : patch,
       })
     },
-    [events, ctx, game.id, manualFinished]
+    [events, ctx, game.id, finished]
   )
 
   return {
@@ -366,7 +366,6 @@ export function useScoringGame(game) {
     state,
     currentBatter,
     finished,
-    manualFinished,
     evaluate,
     record,
     undo,

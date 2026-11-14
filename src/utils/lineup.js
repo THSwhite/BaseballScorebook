@@ -42,9 +42,8 @@ export function lineupsFromRows(rows) {
 export const batterAt = (lineups, side, order) =>
   lineups[side]?.[order - 1] ?? { order, name: '', number: null, playerId: null }
 
-/** 重播比賽要用的設定：局數、一開始的 1set／2set、兩隊打線人數 */
+/** 重播比賽要用的設定：一開始的 1set／2set、兩隊打線人數 */
 export const gameContext = (game, startLineups) => ({
-  innings: game?.innings ?? RULES.INNINGS,
   initialSetSize: game?.set_size ?? 1, // 建立比賽時選的 1set / 2set；中途更改記在紀錄裡
   lineupSize: {
     away: startLineups.away.length || RULES.PLAYERS_ON_FIELD,

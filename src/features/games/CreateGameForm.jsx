@@ -3,7 +3,6 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { fetchTeams } from '../teams/teamsApi'
 
-const INNING_OPTIONS = [5, 7, 9]
 const SET_OPTIONS = [
   { value: 1, title: '1set', hint: '正常進行，上下半局輪流' },
   { value: 2, title: '2set', hint: '每隊一次打兩局：1上、2上、1下、2下' },
@@ -75,7 +74,6 @@ export default function CreateGameForm({ onCreated }) {
     away_team_id: '',
     home_team: '',
     home_team_id: '',
-    innings: 7,
     set_size: 1,
   })
   const [teams, setTeams] = useState([])
@@ -124,7 +122,6 @@ export default function CreateGameForm({ onCreated }) {
         home_team: home,
         away_team_id: form.away_team_id || null,
         home_team_id: form.home_team_id || null,
-        innings: Number(form.innings),
         set_size: Number(form.set_size),
         status: 'scheduled',
         away_score: 0,
@@ -181,15 +178,6 @@ export default function CreateGameForm({ onCreated }) {
           還沒有建立球隊也沒關係，可直接手動輸入隊名。建立球隊後，就能在這裡快速套用。
         </p>
       )}
-
-      <div>
-        <label htmlFor="innings" className={labelClass}>比賽局數</label>
-        <select id="innings" value={form.innings} onChange={set('innings')} className={inputClass}>
-          {INNING_OPTIONS.map((n) => (
-            <option key={n} value={n}>{n} 局</option>
-          ))}
-        </select>
-      </div>
 
       <fieldset>
         <legend className={labelClass}>進攻方式</legend>

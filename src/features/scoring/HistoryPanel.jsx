@@ -117,7 +117,7 @@ function PaEditor({ mode, row, before, ctx, title, onSubmit, onCancel }) {
  * @param events        目前全部紀錄（時間軸）
  * @param state         目前的比賽狀態
  * @param startLineups  原始先發名單
- * @param ctx           { innings, initialSetSize, lineupSize }
+ * @param ctx           { initialSetSize, lineupSize }
  * @param {(rows: object[]) => void} onApply  確認後，把重新推算的整串紀錄寫回
  * @param dirtyRef      { current: boolean }  告訴父層「有尚未送出的修改」
  */
@@ -263,7 +263,7 @@ export default function HistoryPanel({ game, events, state, startLineups, ctx, o
           <li>
             目前局面：{state.inning} 局{halfText(state.half)}
             <span className="mx-2 text-stone-400">→</span>
-            <b>{next.inning} 局{halfText(next.half)}・{next.outs} 出局{next.over ? '・比賽結束' : ''}</b>
+            <b>{next.inning} 局{halfText(next.half)}・{next.outs} 出局</b>
           </li>
           <li>紀錄筆數：{events.length}<span className="mx-2 text-stone-400">→</span><b>{rows.length}</b></li>
         </ul>
