@@ -129,10 +129,9 @@ export function useLiveGame(gameId) {
     }
   }, [gameId, refresh])
 
-  // 只在局數或 set 設定改變時重算（輪詢會一直換新的 game 物件）
-  const innings = game?.innings
+  // 只在 set 設定改變時重算（輪詢會一直換新的 game 物件）
   const setSize = game?.set_size
-  const ctx = useMemo(() => gameContext({ innings, set_size: setSize }, startLineups), [innings, setSize, startLineups])
+  const ctx = useMemo(() => gameContext({ set_size: setSize }, startLineups), [setSize, startLineups])
 
   const state = useMemo(() => replay(events, ctx), [events, ctx])
   const groups = useMemo(() => buildFeed(events), [events])

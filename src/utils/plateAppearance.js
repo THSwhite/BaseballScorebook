@@ -12,6 +12,8 @@
  *   1set：1上 → 1下 → 2上 → 2下 …（照舊）
  *   2set：1上 → 2上 → 1下 → 2下 → 3上 → 4上 → 3下 → 4下 …
  *         （每隊一次連打兩局，上半打完回到這一輪的起始局打下半）
+ *
+ * 局數沒有上限：比賽不會自動結束，由記錄員按「結束比賽」決定。
  */
 import { RULES } from './baseballRules'
 
@@ -127,10 +129,8 @@ export function initialState(setSize = 1) {
     score: { away: 0, home: 0 },
     lineScore: { away: [], home: [] }, // 每局得分
     nextBatter: { away: 1, home: 1 }, // 兩隊各自下一位打者的打序
-    over: false,
-    winner: null, // 'away' | 'home' | null
     setSize, // 目前的設定：每隊一次連打幾局
-    blockSize: setSize, // 這一輪實際連打幾局（一輪開始時決定；最後一局不夠時會縮短）
+    blockSize: setSize, // 這一輪實際連打幾局（一輪開始時決定，中途改設定要等下一輪）
     setNo: 1, // 這一輪的第幾局（1 ~ blockSize）
     halfPlays: 0, // 目前這個半局已經記錄了幾個打席
     inserted: { away: 0, home: 0 }, // 臨時插入的打者人數（打線比先發名單多幾人，輪棒次要算進去）
@@ -224,52 +224,29 @@ export function defaultOutcome(result, bases) {
 /* ---------- 套用一個打席 ---------- */
 const fail = (error) => ({ ok: false, error })
 
-const finishWith = (next, winner) => {
-  next.over = true
-  next.winner = winner
-  return next
-}
-
-/**
- * 從 start 局開始的這一輪，實際要連打幾局。
- * 正規局數內，最後不夠一輪就縮短（例如 7 局制：1-2、3-4、5-6、7）；延長賽一律一局一局打。
- */
-const blockLength = (start, size, innings) => (start <= innings ? Math.min(size, innings - start + 1) : 1)
-
 /**
  * 一輪打完（連打完這一輪的局數）：
  *   上半結束 → 回到這一輪的起始局打下半（2set：1上、2上 之後回到 1下）
  *   下半結束 → 進入下一輪的上半
  */
-function endTurn(next, ctx) {
-  const innings = ctx.innings ?? RULES.INNINGS
-  const { away, home } = next.score
+function endTurn(next) {
   const blockStart = next.inning - (next.setNo - 1) // 這一輪是從第幾局開始的
   next.setNo = 1
   if (next.half === 'top') {
-    // 最後一局先攻打完時後攻已領先，不必打下半
-    if (next.inning >= innings && home > away) return finishWith(next, 'home')
     next.half = 'bottom'
     next.inning = blockStart
   } else {
-    if (next.inning >= innings && home !== away) return finishWith(next, home > away ? 'home' : 'away')
-    next.inning += 1 // 同分就延長賽，沒有局數上限
+    next.inning += 1
     next.half = 'top'
-    next.blockSize = blockLength(next.inning, next.setSize, innings)
+    next.blockSize = next.setSize
   }
   return next
 }
 
-// 打席之後的判斷：再見、半局結束（2set 時同一隊接著打下一局）、比賽結束
-function settle(next, ctx) {
-  const innings = ctx.innings ?? RULES.INNINGS
-  const { away, home } = next.score
-
-  // 再見：後攻在最後一局（含延長）超前，立刻結束
-  if (next.half === 'bottom' && next.inning >= innings && home > away) return finishWith(next, 'home')
+// 打席之後的判斷：三個出局就換半局（2set 時同一隊接著打下一局）
+function settle(next) {
   if (next.outs < RULES.OUTS_PER_HALF) return next
 
-  // 三個出局：這個半局結束
   const arr = next.lineScore[next.half === 'top' ? 'away' : 'home']
   while (arr.length < next.inning) arr.push(0)
   next.outs = 0
@@ -281,7 +258,7 @@ function settle(next, ctx) {
     next.inning += 1
     return next
   }
-  return endTurn(next, ctx)
+  return endTurn(next)
 }
 
 /**
@@ -289,13 +266,11 @@ function settle(next, ctx) {
  * 只有在新的一輪剛開始（上半、這一輪第一局、還沒有打席）時立刻生效；
  * 其他時候只記下新設定，等下一輪才套用，避免打到一半局數重複或跳號。
  */
-export function applySetSize(state, size, ctx = {}) {
-  if (state.over || state.setSize === size) return state
+export function applySetSize(state, size) {
+  if (state.setSize === size) return state
   const next = { ...state, setSize: size }
   const atBlockStart = state.half === 'top' && state.setNo === 1 && state.halfPlays === 0
-  if (atBlockStart) {
-    next.blockSize = blockLength(state.inning, size, ctx.innings ?? RULES.INNINGS)
-  }
+  if (atBlockStart) next.blockSize = size
   return next
 }
 
@@ -303,11 +278,10 @@ export function applySetSize(state, size, ctx = {}) {
  * 驗證並套用一個打席
  * @param state  目前狀態
  * @param pa     { result, batter:{order,name,number,playerId}, movements:[{from,to}], batterTo }
- * @param ctx    { innings, lineupSize:{away,home} }
+ * @param ctx    { lineupSize:{away,home} }
  * @returns {{ ok, error?, record?, nextState?, ignoredRuns? }}
  */
 export function evaluatePlateAppearance(state, pa, ctx = {}) {
-  if (state.over) return fail('比賽已結束')
   const { result, batter, movements, batterTo } = pa
   if (!RESULT_MAP[result]) return fail(`未知的打席結果：${result}`)
   if (!isAvailable(result, state)) return fail('目前的局面不能記錄這個結果')
@@ -382,7 +356,7 @@ export function evaluatePlateAppearance(state, pa, ctx = {}) {
   const size = Math.max(1, (ctx.lineupSize?.[side] ?? RULES.PLAYERS_ON_FIELD) + (state.inserted?.[side] ?? 0))
   next.nextBatter[side] = (batter.order % size) + 1
 
-  return { ok: true, record, nextState: settle(next, ctx), ignoredRuns: rawRuns - runs }
+  return { ok: true, record, nextState: settle(next), ignoredRuns: rawRuns - runs }
 }
 
 /* ---------- 重播 ---------- */
@@ -440,7 +414,7 @@ export function applySubsToState(state, subs = []) {
 /**
  * 把所有紀錄依序重播，得到目前的比賽狀態
  * 紀錄有四種：pa 打席（預設）、note 備註（不影響比賽）、set 更改一次連打幾局、sub 換人
- * @param ctx { innings, lineupSize, initialSetSize }
+ * @param ctx { lineupSize, initialSetSize }
  */
 export function replay(rows, ctx = {}) {
   let state = initialState(ctx.initialSetSize ?? 1)
@@ -452,7 +426,7 @@ export function replay(rows, ctx = {}) {
       continue
     }
     if (kind === 'set') {
-      if (row.set_size === 1 || row.set_size === 2) state = applySetSize(state, row.set_size, ctx)
+      if (row.set_size === 1 || row.set_size === 2) state = applySetSize(state, row.set_size)
       continue
     }
     const res = evaluatePlateAppearance(state, rowToPa(row), ctx)

@@ -1,12 +1,11 @@
-import { lineScoreCell } from '../../utils/gameSummary'
+import { lineScoreCell, lineScoreColumns, winnerOf } from '../../utils/gameSummary'
 
 /**
  * 比分板：大比分 + 局數比分表（R 得分、H 安打、E 失誤）
  * @param {'scheduled'|'live'|'finished'} status
  */
 export default function Scoreboard({ game, state, totals, status }) {
-  const cols = Math.max(game.innings ?? 9, state.inning)
-  const innings = Array.from({ length: cols }, (_, i) => i + 1)
+  const innings = lineScoreColumns(state)
   const batting = state.half === 'top' ? 'away' : 'home'
 
   const statusText =
@@ -16,7 +15,7 @@ export default function Scoreboard({ game, state, totals, status }) {
         ? `${state.inning} 局${state.half === 'top' ? '上' : '下'}${state.blockSize > 1 ? `・連打 ${state.setNo}/${state.blockSize} 局` : ''}`
         : '未開賽'
 
-  const winner = status === 'finished' ? state.winner : null
+  const winner = status === 'finished' ? winnerOf(state.score) : null
 
   const teamBlock = (side, align) => (
     <div className={`min-w-0 ${align === 'right' ? 'text-right' : 'text-left'}`}>
@@ -79,7 +78,7 @@ export default function Scoreboard({ game, state, totals, status }) {
                   {side === 'away' ? game.away_team : game.home_team}
                 </td>
                 {innings.map((i) => (
-                  <td key={i} className="px-1 py-2 text-stone-700">{lineScoreCell(state, side, i)}</td>
+                  <td key={i} className="px-1 py-2 text-stone-700">{lineScoreCell(state, side, i, status === 'finished')}</td>
                 ))}
                 <td className="border-l border-stone-200 px-1 py-2 font-bold text-stone-900">{state.score[side]}</td>
                 <td className="px-1 py-2">{totals[side].h}</td>

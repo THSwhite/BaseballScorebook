@@ -4,7 +4,6 @@
  */
 
 export const RULES = Object.freeze({
-  INNINGS: 9, // 正規局數（建立比賽沒選時的預設）
   OUTS_PER_HALF: 3, // 每半局出局數
   PLAYERS_ON_FIELD: 9, // 沒設定先發名單時，用 9 棒輪轉
 })

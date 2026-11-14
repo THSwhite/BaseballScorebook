@@ -28,7 +28,7 @@ import { describePlateAppearance, describeSubstitutions } from './formatters'
  * 把整串紀錄依序重新推算
  * @param rows         紀錄（順序就是新的時間軸，seq 會被重新編號）
  * @param startLineups 原始先發 { away, home }
- * @param ctx          { innings, initialSetSize, lineupSize }
+ * @param ctx          { initialSetSize, lineupSize }
  * @param teamNames    { away, home }（換人說明文字用）
  * @returns {{
  *   rows: object[],       重新推算後的紀錄
@@ -58,7 +58,7 @@ export function rebuildTimeline(rows, startLineups, ctx, teamNames = { away: '�
 
     if (kind === 'set') {
       out.push({ ...row, ...at, seq: out.length + 1 })
-      if (row.set_size === 1 || row.set_size === 2) state = applySetSize(state, row.set_size, ctx)
+      if (row.set_size === 1 || row.set_size === 2) state = applySetSize(state, row.set_size)
       continue
     }
 

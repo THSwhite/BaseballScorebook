@@ -8,17 +8,15 @@ import HistoryPanel from './HistoryPanel'
 import { useScoringGame } from './useScoringGame'
 import { HAS_BATTED_BALL, defaultHeight, defaultOutcome } from '../../utils/plateAppearance'
 import { hasNumber } from '../../utils/formatters'
-import { lineScoreCell, teamTotals } from '../../utils/gameSummary'
+import { lineScoreCell, lineScoreColumns, teamTotals, winnerOf } from '../../utils/gameSummary'
 
 // 沒有擊球的結果（三振、保送、觸身球）：就算有跑者也直接記錄，跑者去向固定。
 // 有擊球的結果一律先開確認畫面（要選方向、高度，跑者去向也在同一個畫面）
 const SKIP_CONFIRM = new Set(['BB', 'HBP', 'K'])
 
 /* ---------- 局數比分表 ---------- */
-function LineScore({ game, state, events }) {
-  const cols = Math.max(game.innings ?? 9, state.inning)
-  const innings = Array.from({ length: cols }, (_, i) => i + 1)
-
+function LineScore({ game, state, events, finished }) {
+  const innings = lineScoreColumns(state)
   const totals = teamTotals(events)
 
   const batting = state.half === 'top' ? 'away' : 'home'
@@ -32,7 +30,7 @@ function LineScore({ game, state, events }) {
             {innings.map((i) => (
               <th
                 key={i}
-                className={`px-2 py-1.5 font-medium ${i === state.inning && !state.over ? 'text-emerald-800' : ''}`}
+                className={`px-2 py-1.5 font-medium ${i === state.inning && !finished ? 'text-emerald-800' : ''}`}
               >
                 {i}
               </th>
@@ -45,13 +43,13 @@ function LineScore({ game, state, events }) {
           {['away', 'home'].map((side) => (
             <tr
               key={side}
-              className={`border-t border-stone-100 ${!state.over && batting === side ? 'bg-emerald-50' : ''}`}
+              className={`border-t border-stone-100 ${!finished && batting === side ? 'bg-emerald-50' : ''}`}
             >
               <td className="max-w-[9rem] truncate px-3 py-1.5 text-left font-medium text-stone-900">
                 {side === 'away' ? game.away_team : game.home_team}
               </td>
               {innings.map((i) => (
-                <td key={i} className="px-2 py-1.5">{lineScoreCell(state, side, i)}</td>
+                <td key={i} className="px-2 py-1.5">{lineScoreCell(state, side, i, finished)}</td>
               ))}
               <td className="px-2 py-1.5 font-bold text-stone-900">{state.score[side]}</td>
               <td className="px-2 py-1.5 text-stone-700">{totals[side].h}</td>
@@ -236,9 +234,10 @@ export default function ScoringPanel({ game }) {
     return window.confirm('修改歷史裡有尚未送出的修改，確定要放棄嗎？')
   }
 
-  const winnerText = state.winner
-    ? `${state.winner === 'home' ? game.home_team : game.away_team} 獲勝`
-    : '比賽結束'
+  const winner = winnerOf(state.score)
+  const winnerText = winner
+    ? `${winner === 'home' ? game.home_team : game.away_team} 獲勝`
+    : '比賽結束（平手）'
 
   return (
     <div className="space-y-5">
@@ -257,18 +256,16 @@ export default function ScoringPanel({ game }) {
         <SyncStatus sync={g.sync} />
       </header>
 
-      <LineScore game={game} state={state} events={events} />
+      <LineScore game={game} state={state} events={events} finished={g.finished} />
 
       {g.finished && (
         <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-stone-800 px-4 py-3 text-white">
           <span>
             {winnerText}　{game.away_team} {state.score.away} : {state.score.home} {game.home_team}
           </span>
-          {g.manualFinished && !state.over && (
-            <button type="button" onClick={g.reopenGame} className="rounded-md bg-white/15 px-3 py-1 text-sm hover:bg-white/25">
-              重新開啟
-            </button>
-          )}
+          <button type="button" onClick={g.reopenGame} className="rounded-md bg-white/15 px-3 py-1 text-sm hover:bg-white/25">
+            重新開啟
+          </button>
         </div>
       )}
 
